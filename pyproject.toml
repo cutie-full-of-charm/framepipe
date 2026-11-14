@@ -1,0 +1,73 @@
+[project]
+name = "framepipe"
+version = "0.4.2.dev2"
+requires-python = ">=3.14"      # you can try olderr version on your risk.
+readme = "README.md"
+dependencies = [
+    "numpy",
+]
+
+[build-system]
+requires = ["setuptools", "wheel", "nanobind"]
+build-backend = "setuptools.build_meta"
+
+[dependency-groups]
+dev = ["wheel", "psutil", "ruff", "setuptools", "nanobind", "build"]
+test = [
+    "loguru",
+    "pytest",
+    "pillow",
+    "matplotlib",
+    "requests",
+    "tqdm",
+    "pytest-repeat",
+    "av",
+]
+examples = ["torch", "torchvision", "opencv-python"]
+
+[tool.scikit-build]
+cmake.build-type = "Release"
+
+[tool.ruff]
+line-length = 80
+target-version = "py314"
+
+[tool.ruff.format]
+line-ending = "auto"
+docstring-code-format = false
+quote-style = "double"
+
+[tool.ruff.lint]
+select = ["I"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["framepipe*"]
+
+[tool.setuptools.package-data]
+framepipe = ["*.pyd", "*.dll", "*.so"]
+
+[tool.pyright]
+venvPath = "."
+venv = ".venv"
+typeCheckingMode = "standard"
+
+[[tool.uv.index]]
+name = "pytorch-cu134"
+url = "https://download.pytorch.org/whl/cu134"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu134" }
+torchvision = { index = "pytorch-cu134" }
+
+[tool.cibuildwheel]
+build = "cp314-manylinux_x86_64"
+skip = "*-musllinux*"
+archs = ["x86_64"]
+
+[tool.cibuildwheel.linux]
+manylinux-x86_64-image = "manylinux_2_34"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

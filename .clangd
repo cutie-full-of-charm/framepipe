@@ -1,0 +1,40 @@
+CompileFlags:
+  Add:
+    - -std=c++23
+    - -Wall
+    - -Wextra
+    - -Wpedantic
+    - -Wshadow
+    - -Wunused
+    - -I opt/cuda/include
+  Remove:
+    - -flto*
+    - -fno-fat-lto-objects
+    - -fvisibility*
+  Compiler: clang++
+  CompilationDatabase: build/linux-release
+
+Diagnostics:
+  UnusedIncludes: Strict
+  MissingIncludes: Strict
+  ClangTidy:
+    Remove:
+      - readability-braces-around-statements
+      - readability-magic-numbers
+      - readability-identifier-length
+      - cppcoreguidelines-pro-bounds-pointer-arithmetic
+      - cppcoreguidelines-pro-type-reinterpret-cast
+      - cppcoreguidelines-pro-type-vararg
+    FastCheckFilter: Strict
+
+InlayHints:
+  Enabled: true
+  ParameterNames: true
+  DeducedTypes: true
+  Designators: true
+
+Hover:
+  ShowAKA: true
+
+Index:
+  Background: Build

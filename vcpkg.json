@@ -1,0 +1,27 @@
+{
+  "name": "framepipe",
+  "version": "0.2.0",
+  "dependencies": [
+    {
+      "name": "ffmpeg",
+      "default-features": false,
+      "features": [
+        "avcodec",
+        "avformat",
+        "avdevice",
+        "avfilter",
+        "swresample",
+        "swscale",
+        "nvcodec",
+        { "name": "vaapi", "platform": "linux" },
+        { "name": "opencl", "platform": "linux" },
+        { "name": "amf", "platform": "windows" }
+      ]
+    },
+    "spdlog"
+  ],
+  "builtin-baseline": "44ccfd88b3eca6929d6d16398c7b19945c29a5f6",
+  "configuration": {
+    "overlay-ports": ["./vcpkg-overlays"]
+  }
+}

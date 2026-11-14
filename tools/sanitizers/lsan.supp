@@ -1,0 +1,3 @@
+leak:PyUFunc_AddLoop
+leak:PyArray_AddCastingImplementation_FromSpec
+leak:__Pyx_modinit_Exttype___pyx_obj_2av_6stream_Stream

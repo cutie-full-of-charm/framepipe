@@ -1,0 +1,71 @@
+{
+  "version": 6,
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/vcpkg/scripts/buildsystems/vcpkg.cmake",
+        "CMAKE_CXX_STANDARD": "23",
+        "X_VCPKG_APPLOCAL_DEPS_INSTALL": "ON"
+      }
+    },
+    {
+      "name": "linux",
+      "hidden": true,
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_CXX_COMPILER": "clang++",
+        "VCPKG_TARGET_TRIPLET": "x64-linux",
+        "CMAKE_POSITION_INDEPENDENT_CODE": "ON",
+        "CMAKE_BUILD_TYPE": "Release",
+        "X_VCPKG_APPLOCAL_DEPS_INSTALL": "OFF"
+      },
+      "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Linux" }
+    },
+    {
+      "name": "windows",
+      "hidden": true,
+      "inherits": "base",
+      "cacheVariables": {
+        "VCPKG_TARGET_TRIPLET": "x64-windows-static",
+        "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded$<$<CONFIG:Debug>:Debug>"
+      },
+      "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Windows" }
+    },
+    {
+      "name": "linux-asan",
+      "inherits": "linux",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "SANITIZER": "address",
+        "VCPKG_TARGET_TRIPLET": "x64-linux-dynamic"
+      }
+    },
+    {
+      "name": "linux-tsan",
+      "inherits": "linux",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "SANITIZER": "thread",
+        "VCPKG_TARGET_TRIPLET": "x64-linux-dynamic"
+      }
+    },
+
+    { "name": "linux-debug",    "inherits": "linux",   "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug" } },
+    { "name": "linux-release",  "inherits": "linux",   "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" } },
+    { "name": "win-debug",      "inherits": "windows", "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug" } },
+    { "name": "win-release",    "inherits": "windows", "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" } }
+  ],
+  "buildPresets": [
+    { "name": "linux-debug",    "configurePreset": "linux-debug" },
+    { "name": "linux-release",  "configurePreset": "linux-release" },
+    { "name": "linux-asan",     "configurePreset": "linux-asan" },
+    { "name": "linux-tsan",     "configurePreset": "linux-tsan" },
+    { "name": "win-debug",      "configurePreset": "win-debug" },
+    { "name": "win-release",    "configurePreset": "win-release" }
+  ]
+}
