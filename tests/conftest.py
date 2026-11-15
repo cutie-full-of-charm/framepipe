@@ -18,7 +18,7 @@ from .fixtures.utils import (
     MEDIAMTX_EXECUTABLE,
     VIDEO_CACHE_DIR,
 )
-from .fixtures.video import gen_videoset
+from .fixtures.video import gen_videoset, test_videoset_exists
 
 
 @pytest.fixture(params=[Reader], ids=lambda c: c.__name__)
@@ -68,7 +68,11 @@ def require_netem():
 
 @pytest.fixture(scope="session", autouse=True)
 def videos():
-    gen_videoset()
+    if test_videoset_exists():
+        logger.success("videoset found, generation skipped")
+    else:
+        logger.info("generating videoset")
+        gen_videoset()
 
     videos = {
         filename: os.path.join(VIDEO_CACHE_DIR, filename)

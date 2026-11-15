@@ -87,6 +87,9 @@ def test_drop_recover(publish_vid, videos, reader_cls):
 
 
 # freeze, подразумневается, что сокет отркыт, но получаемых кадров нет
+# FIXME: !!!
+#       FAILED tests/test_reader_live.py::test_freeze_recover[WrappedReader] - assert 0.9333333333333333 == 0.9
+#       ERROR tests/test_reader_live.py::test_freeze_recover[WrappedReader] - TimeoutError: RTSP publisher did not exit in time
 def test_freeze_recover(publish_vid, videos, reader_cls):
     if platform.system() != "Linux":
         pytest.skip(f"OS is not Linux, OS: {platform.system()}")
