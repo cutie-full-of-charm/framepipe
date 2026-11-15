@@ -45,7 +45,7 @@ where = ["."]
 include = ["framepipe*"]
 
 [tool.setuptools.package-data]
-framepipe = ["*.pyd", "*.dll", "*.so"]
+framepipe = ["*.pyd", "*.dll", "*.so", "*.pyi"]
 
 [tool.pyright]
 venvPath = "."

@@ -1,6 +1,8 @@
 # framepipe/reader.py
 import numpy as np
 
+from framepipe import Frame
+
 # import framepipe._framepipe as _framepipe
 from ._framepipe import (
     HWAccel,
@@ -108,6 +110,9 @@ class WrappedReader:
 
     def read_new_frame(self):
         return self._reader.read_new_frame()
+
+    def read_latest_frame(self, timeout: float = 1.0) -> Frame | None:
+        return self._reader.read_latest_frame(timeout=timeout)
 
     def next(self):
         return self._reader.next()

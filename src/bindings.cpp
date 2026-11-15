@@ -291,28 +291,30 @@ NB_MODULE(_framepipe, m) {
                      return nb::none();
                  return nb::cast(frame_to_numpy(frame));
              })
-        .def("next",
-             [](Reader &r) -> nb::object {
-                 std::shared_ptr<Frame> frame;
-                 {
-                     nb::gil_scoped_release release;
-                     frame = r.next();
-                 }
-                 if (!frame)
-                     return nb::none();
-                 return nb::cast(frame_to_numpy(frame));
-             },
-             nb::sig("def next(self) -> object | None"))
-        .def("next_frame",
-             [](Reader &r) -> nb::object {
-                 std::shared_ptr<Frame> frame;
-                 {
-                     nb::gil_scoped_release release;
-                     frame = r.next();
-                 }
-                 return cast_frame(frame);
-             },
-             nb::sig("def next_frame(self) -> Frame | None"))
+        .def(
+            "next",
+            [](Reader &r) -> nb::object {
+                std::shared_ptr<Frame> frame;
+                {
+                    nb::gil_scoped_release release;
+                    frame = r.next();
+                }
+                if (!frame)
+                    return nb::none();
+                return nb::cast(frame_to_numpy(frame));
+            },
+            nb::sig("def next(self) -> object | None"))
+        .def(
+            "next_frame",
+            [](Reader &r) -> nb::object {
+                std::shared_ptr<Frame> frame;
+                {
+                    nb::gil_scoped_release release;
+                    frame = r.next();
+                }
+                return cast_frame(frame);
+            },
+            nb::sig("def next_frame(self) -> Frame | None"))
         .def("read_new",
              [](Reader &r) -> nb::object {
                  nb::gil_scoped_release release;
@@ -358,6 +360,21 @@ NB_MODULE(_framepipe, m) {
                 return cast_frame(frame);
             },
             nb::sig("def read_new_frame(self) -> Frame | None"))
+
+        .def(
+            "read_latest_frame",
+            [](Reader &r, double timeout) -> nb::object {
+                std::optional<std::shared_ptr<Frame>> result;
+                {
+                    nb::gil_scoped_release release;
+                    result = r.read_latest(timeout);
+                }
+                if (!result) {
+                    return nb::none();
+                }
+                return cast_frame(*result);
+            },
+            "timeout"_a = 1.0, nb::sig("def read_latest_frame(self, timeout: float = 1.0) -> Frame | None"))
         .def("grab", &Reader::grab)
         .def("retrieve",
              [](Reader &r) -> std::pair<bool, nb::object> {

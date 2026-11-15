@@ -5,6 +5,7 @@
 #include "frame.hpp"
 #include "pipeline.hpp"
 #include "post_processors/impls/cpu.hpp"
+#include <cmath>
 #ifndef _WIN32
 #include "post_processors/impls/vaapi.hpp"
 #endif
@@ -332,13 +333,27 @@ bool Reader::_await_frame_request() {
 }
 
 std::optional<std::shared_ptr<Frame>> Reader::read_latest(double timeout_sec) {
+    if (!std::isfinite(timeout_sec) || timeout_sec < 0.0) {
+        throw std::invalid_argument("timeout_sec must be finite and non-negative");
+    }
+
     std::unique_lock<std::mutex> lock(_lock);
-    bool got = _cv.wait_for(lock, std::chrono::duration<double>(timeout_sec),
-                            [this] { return (_frame != nullptr && _frame_id != _last_read_id) || _stop_flag.load(); });
-    if (!got || _stop_flag.load() || _frame == nullptr)
+
+    const bool ready = _cv.wait_for(lock, std::chrono::duration<double>(timeout_sec), [this] {
+        return (_frame && _frame_id != _last_read_id) || _stop_flag.load() || _on_demand_finished;
+    });
+
+    if (!ready) {
         return std::nullopt;
-    _last_read_id = _frame_id;
-    return _frame;
+    }
+
+    if (_frame && _frame_id != _last_read_id) {
+        _last_read_id = _frame_id;
+        return _frame;
+    }
+
+    // stop/EOF
+    return std::nullopt;
 }
 
 void Reader::grab() {
