@@ -1,4 +1,6 @@
 # framepipe/reader.py
+from typing import Literal
+
 import numpy as np
 
 from framepipe import Frame
@@ -105,19 +107,19 @@ class WrappedReader:
         # self._require_not_planar()
         return self._reader.read_latest(timeout=timeout)  # pyright: ignore
 
-    def read_frame(self):
+    def read_frame(self) -> Frame:
         return self._reader.read_frame()
 
-    def read_new_frame(self):
+    def read_new_frame(self) -> Frame | None:
         return self._reader.read_new_frame()
 
     def read_latest_frame(self, timeout: float = 1.0) -> Frame | None:
         return self._reader.read_latest_frame(timeout=timeout)
 
-    def next(self):
+    def next(self) -> np.ndarray | None:
         return self._reader.next()
 
-    def next_frame(self):
+    def next_frame(self) -> Frame | None:
         return self._reader.next_frame()
 
     @staticmethod
@@ -143,18 +145,18 @@ class WrappedReader:
     def read_new_tensor(self):
         return self._to_torch(self._reader.read_new_frame())
 
-    def read_dlpack(self):
+    def read_dlpack(self) -> Frame:
         """Return the newest published Frame as a DLPack producer (CPU/CUDA/OpenCL)."""
         return self._reader.read_frame()
 
-    def read_new_dlpack(self):
+    def read_new_dlpack(self) -> Frame | None:
         """Return a new Frame as a DLPack producer; consumer owns its capsule."""
         return self._reader.read_new_frame()
 
     def grab(self) -> None:
         self._reader.grab()
 
-    def retrieve(self):
+    def retrieve(self) -> tuple[Literal[False], None] | tuple[Literal[True], np.ndarray]:
         return self._reader.retrieve()
 
     def release(self) -> None:

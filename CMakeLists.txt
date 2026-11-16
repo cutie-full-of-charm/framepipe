@@ -154,6 +154,7 @@ if(SANITIZER STREQUAL "none" AND FRAMEPIPE_GENERATE_STUBS)
     MODULE _framepipe
     OUTPUT ${CMAKE_CURRENT_SOURCE_DIR}/framepipe/_framepipe.pyi
     PYTHON_PATH $<TARGET_FILE_DIR:_framepipe>
+    PATTERN_FILE ${CMAKE_CURRENT_SOURCE_DIR}/stub_patterns.txt
     DEPENDS _framepipe
   )
   add_custom_target(stubs ALL DEPENDS framepipe_stub)
