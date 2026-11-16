@@ -1,0 +1,2 @@
+_framepipe.__prefix__:
+    from typing import Literal

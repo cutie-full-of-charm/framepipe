@@ -285,9 +285,11 @@ NB_MODULE(_framepipe, m) {
         .def(
             "read",
             [](Reader &r) -> nb::object {
-                nb::gil_scoped_release release;
-                auto frame = r.read();
-                nb::gil_scoped_acquire acquire;
+                std::shared_ptr<Frame> frame;
+                {
+                    nb::gil_scoped_release release;
+                    frame = r.read();
+                }
                 if (!frame)
                     return nb::none();
                 return nb::cast(frame_to_numpy(frame));
@@ -296,9 +298,11 @@ NB_MODULE(_framepipe, m) {
         .def(
             "read_new",
             [](Reader &r) -> nb::object {
-                nb::gil_scoped_release release;
-                auto frame = r.read_new();
-                nb::gil_scoped_acquire acquire;
+                std::shared_ptr<Frame> frame;
+                {
+                    nb::gil_scoped_release release;
+                    frame = r.read();
+                }
                 if (!frame)
                     return nb::none();
                 return nb::cast(frame_to_numpy(frame));

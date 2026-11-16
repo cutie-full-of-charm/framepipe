@@ -94,17 +94,17 @@ class WrappedReader:
 
     def read(self) -> np.ndarray | None:
         self._require_cpu_output()
-        # self._require_not_planar()
+        self._require_not_planar()
         return self._reader.read()  # pyright: ignore
 
     def read_new(self) -> np.ndarray | None:
         self._require_cpu_output()
-        # self._require_not_planar()
+        self._require_not_planar()
         return self._reader.read_new()  # pyright: ignore
 
     def read_latest(self, timeout) -> np.ndarray | None:
         self._require_cpu_output()
-        # self._require_not_planar()
+        self._require_not_planar()
         return self._reader.read_latest(timeout=timeout)  # pyright: ignore
 
     def read_frame(self) -> Frame:
