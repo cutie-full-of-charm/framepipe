@@ -301,7 +301,7 @@ NB_MODULE(_framepipe, m) {
                 std::shared_ptr<Frame> frame;
                 {
                     nb::gil_scoped_release release;
-                    frame = r.read();
+                    frame = r.read_new();
                 }
                 if (!frame)
                     return nb::none();
