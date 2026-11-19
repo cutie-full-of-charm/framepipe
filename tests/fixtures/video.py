@@ -6,8 +6,6 @@ from pathlib import Path
 import av
 import numpy as np
 from loguru import logger
-from matplotlib import font_manager
-from PIL import Image, ImageDraw, ImageFont
 from tqdm import tqdm
 
 from .utils import VIDEO_CACHE_DIR
@@ -339,8 +337,8 @@ def generate_video(
 
 
 # videoset:
-VIDEOSET_LIST = []
-
+TEST_VIDEOSET = []
+BENCH_VIDEOSET = []
 
 # FIXME: сделать явное разделение на тестовый/бенч видеосеты по аргументу
 def gen_videoset():
@@ -362,12 +360,12 @@ def gen_videoset():
     # add("h264_360p.mp4", resolution="640x360")
     # add("h264_720p.mp4", resolution="1280x720")
     # add("h264_1080p.mp4", resolution="1920x1080")
-    # add("h264_2160p.mp4", resolution="3840x2160")
+    add("h264_2160p.mp4", resolution="3840x2160")
 
     # add("h265_360p.mp4", codec="h265", resolution="640x360")
     # add("h265_720p.mp4", codec="h265", resolution="1280x720")
     # add("h265_1080p.mp4", codec="h265", resolution="1920x1080")
-    # add("h265_2160p.mp4", codec="h265", resolution="3840x2160")
+    add("h265_2160p.mp4", codec="h265", resolution="3840x2160")
 
     # B) GOP и B-frames (7 видео)
     # add("h264_gop1.mp4", gop=1)
@@ -425,5 +423,9 @@ def test_videoset_exists():
         return False
     # TESTFIXME: не забывать расширять проверку по мере расширения тестов
     if not Path(VIDEO_CACHE_DIR / "30fps_10s.mp4").exists():
+        return False
+    if not Path(VIDEO_CACHE_DIR / "h265_2160p.mp4").exists():
+        return False
+    if not Path(VIDEO_CACHE_DIR / "h264_2160p.mp4").exists():
         return False
     return True

@@ -11,6 +11,7 @@ tests/fixtures/video_cache/*
 logs
 build
 dist
+deps
 test_data
 *.mp4
 *.webm

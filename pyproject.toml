@@ -1,6 +1,6 @@
 [project]
 name = "framepipe"
-version = "0.4.2.dev2"
+version = "0.4.2.dev4"
 requires-python = ">=3.14"      # you can try olderr version on your risk.
 readme = "README.md"
 dependencies = [
@@ -16,12 +16,11 @@ dev = ["wheel", "psutil", "ruff", "setuptools", "nanobind", "build"]
 test = [
     "loguru",
     "pytest",
-    "pillow",
-    "matplotlib",
     "requests",
     "tqdm",
     "pytest-repeat",
     "av",
+    "nprof>=0.6.1",
 ]
 examples = ["torch", "torchvision", "opencv-python"]
 
