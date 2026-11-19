@@ -20,6 +20,14 @@ Originally built for **real-time ML/CV and edge inference**, framepipe now also 
 
 ## Quick start
 
+Package is available via PyPi
+```sh
+uv add framepipe
+# or
+pip install framepipe
+# or you can download .whl from Releases page 
+```
+
 Sequential processing of a file with the default CPU/BGR output:
 
 ```python
