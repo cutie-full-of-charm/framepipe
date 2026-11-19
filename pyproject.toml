@@ -7,6 +7,11 @@ dependencies = [
     "numpy",
 ]
 
+[project.urls]
+Homepage = "https://github.com/cutie-full-of-charm/framepipe"
+Repository = "https://github.com/cutie-full-of-charm/framepipe"
+Issues = "https://github.com/cutie-full-of-charm/framepipe/issues"
+
 [build-system]
 requires = ["setuptools", "wheel", "nanobind"]
 build-backend = "setuptools.build_meta"
@@ -70,3 +75,43 @@ manylinux-x86_64-image = "manylinux_2_34"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+
+license = "MPL-2.0"
+license-files = ["LICENSE"]
+
+keywords = [
+    "video",
+    "video-decoding",
+    "video-processing",
+    "hardware-acceleration",
+    "ffmpeg",
+    "vaapi",
+    "cuda",
+    "opencl",
+    "computer-vision",
+    "machine-learning",
+    "real-time",
+    "edge-inference",
+    "gpu",
+]
+
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: 3.15",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Operating System :: POSIX :: Linux",
+    "Environment :: GPU",
+    "Topic :: Multimedia :: Video",
+    "Topic :: Multimedia :: Video :: Conversion",
+    "Topic :: Scientific/Engineering :: Image Processing",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
