@@ -26,7 +26,7 @@ set -e
 dnf -y update
 dnf -y install \
   git curl wget ca-certificates tar gzip unzip zip which \
-  clang clang++ make cmake ninja-build pkgconf-pkg-config \
+  clang make cmake ninja-build pkgconf-pkg-config \
   autoconf automake libtool bison flex patch diffutils \
   perl nasm yasm python3-pip \
   libdrm-devel libva-devel rsync
@@ -66,7 +66,7 @@ nvcc --version
 ```bash
 # src sync via /io:
 mkdir -p ~/framepipe
-rsync -av --exclude={'.venv/','test_data/','vcpkg/','other/','profiling/','build/','.cache/','.pytest_cache/'} /io/path/to/framepipe ~/
+rsync -av --exclude={'.venv/','test_data/','vcpkg/','other/','profiling/','build/','.cache/','.pytest_cache/','tests'} /io/path/to/framepipe ~/
 cd ~/framepipe
 
 # vcpkg
@@ -75,6 +75,7 @@ sh vcpkg/bootstrap-vcpkg.sh -disableMetrics
 
 # python 3.14
 export PATH="/opt/python/cp314-cp314/bin:$PATH"
+pip install nanobind
 uv sync --group dev --python 3.14
 
 ```
