@@ -76,10 +76,6 @@ manylinux-x86_64-image = "manylinux_2_34"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
-
-license = "MPL-2.0"
-license-files = ["LICENSE"]
-
 keywords = [
     "video",
     "video-decoding",
@@ -115,3 +111,7 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Image Processing",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
+
+
+license = "MPL-2.0"
+license-files = ["LICENSE"]
