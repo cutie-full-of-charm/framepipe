@@ -2,6 +2,8 @@
 # framepipe/reader.py
 # SPDX-License-Identifier: MPL-2.0
 #
+from __future__ import annotations
+
 from typing import Literal
 
 import numpy as np
