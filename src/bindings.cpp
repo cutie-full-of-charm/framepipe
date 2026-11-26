@@ -1,9 +1,14 @@
-// src/bindings.cpp
+/*
+ * src/bindings.cpp
+ * SPDX-License-Identifier: MPL-2.0
+ */
 #include "_base.hpp"
+#include "_error.hpp"
 #include "frame.hpp"
 #include "reader.hpp"
 #include <cstddef>
 #include <cstdint>
+#include <exception>
 #include <memory>
 #include <nanobind/nanobind.h>
 #include <nanobind/ndarray.h>
@@ -415,6 +420,34 @@ NB_MODULE(_framepipe, m) {
                 };
             },
             nb::arg("cb").none())
+
+        .def(
+            "get_last_exception",
+            [](const Reader &r) -> nb::object {
+                auto ep = r.get_last_exception();
+
+                if (!ep)
+                    return nb::none();
+
+                auto runtime_error = nb::module_::import_("builtins").attr("RuntimeError");
+
+                try {
+                    std::rethrow_exception(ep);
+                } catch (const ReaderError &e) {
+                    nb::object exc = runtime_error(e.what());
+
+                    exc.attr("kind") = nb::int_(static_cast<int>(e.kind()));
+
+                    exc.attr("ffmpeg_code") = nb::int_(e.ffmpeg_code());
+
+                    return exc;
+                } catch (const std::exception &e) {
+                    return runtime_error(e.what());
+                } catch (...) {
+                    return runtime_error("Unknown C++ exception");
+                }
+            },
+            nb::sig("def get_last_exception(self) -> RuntimeError | None"))
 
         .def_ro("name", &Reader::name)
         .def_ro("source", &Reader::source)

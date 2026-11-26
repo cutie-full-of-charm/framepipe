@@ -1,4 +1,7 @@
+#
 # framepipe/reader.py
+# SPDX-License-Identifier: MPL-2.0
+#
 from typing import Literal
 
 import numpy as np
@@ -185,6 +188,9 @@ class WrappedReader:
         # print(f"[{name}]: {old} -> {new}")
         pass
 
+    def get_last_exception(self) -> RuntimeError | None:
+        return self._reader.get_last_exception()
+
     @property
     def warmuped(self) -> bool:
         return self._reader.frames_processed > 0
@@ -225,7 +231,7 @@ class WrappedReader:
     def frames_processed(self) -> int:
         return self._impl.frames_processed if self._impl else -1
 
-    def __enter__(self) -> Reader:
+    def __enter__(self) -> WrappedReader:
         return self
 
     def __exit__(self, exc_type, exc, tb) -> None:

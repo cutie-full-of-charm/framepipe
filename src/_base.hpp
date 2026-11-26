@@ -1,4 +1,7 @@
-// src/_base.hpp
+/*
+ * src/_base.hpp
+ * SPDX-License-Identifier: MPL-2.0
+ */
 #pragma once
 #include <chrono>
 #include <cstdint>

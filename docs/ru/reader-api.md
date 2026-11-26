@@ -39,25 +39,15 @@ reader = Reader(
 
 Распознавание live-источника основано на префиксах URL: `rtsp://`, `rtmp://`, `rtmps://`, `udp://`, `srt://`, `mms://`. Для распознанных live-источников выставляется набор низколатентных FFmpeg-опций (`rtsp_transport=tcp`, `fflags=nobuffer`, `flags=low_delay`, `max_delay=0`, `analyzeduration=0`, `probesize=32`); пользовательские `av_container_options` имеют приоритет по одноимённым ключам.
 
-## Модели доставки и тип результата
-
-`Reader` разделяет как получать кадр (немедленно / только новый / ожидать новый / запросить следующий) и в каком виде получить (`Frame` или NumPy). Фоновое чтение реализует latest-drop, приоритетный для realtime ML/CV и edge-систем; `on_demand` позволяет покадрово обрабатывать файл. Детали, диаграмма и рекомендации — в [reading-models.md](reading-models.md).
-
 ## Методы получения кадров
 
-| Метод | Возвращает | Когда использовать |
-| --- | --- | --- |
-| `read_frame()` | Последний `Frame` или `None` | Повторный доступ к последнему опубликованному кадру, CPU/GPU/NATIVE |
-| `read_new_frame()` | Новый `Frame` или `None` | Не повторять кадр, но промежуточные могут быть пропущены |
-| `read_latest_frame(timeout=1.0)` | `Frame` или `None` | Ожидать новый кадр не дольше указанного таймаута |
-| `next_frame()` | `Frame` или `None` на EOF | Файл, только `on_demand=True`, один кадр по запросу |
-| `read()` | NumPy ndarray или `None` | Только packed CPU (`RGB24`, `BGR24`, `GRAY8`) |
-| `read_new()` | NumPy ndarray или `None` | То же, только новый кадр |
-| `read_latest(timeout)` | NumPy ndarray или `None` | То же, с ожиданием нового кадра |
-| `next()` | NumPy ndarray или `None` | On-demand + packed CPU; для GPU/NATIVE используйте `next_frame()` |
-| `read_tensor()`, `read_new_tensor()` | PyTorch tensor / `None` | DLPack для CPU/CUDA packed; OpenCL отклоняется |
-| `read_dlpack()`, `read_new_dlpack()` | `Frame` / `None` | Получить `Frame`; DLPack работает только у поддерживаемых packed типов |
+`Reader` разделяет **как** получать кадр (немедленно / только новый / ждать новый / запросить следующий) и **в каком виде**: `numpy.ndarray` через `read*` либо объект `Frame` через методы с `_frame`.
 
+- `read()` / `read_frame()`, `read_new()` / `read_new_frame()`, `read_latest(timeout)` / `read_latest_frame(timeout=1.0)` работают с последним опубликованным кадром.
+- `next()` / `next_frame()` запрашивают следующий кадр в режиме `on_demand=True` (только файл).
+- `read_tensor()` / `read_new_tensor()` используют PyTorch и DLPack; `read_dlpack()` / `read_new_dlpack()` возвращают `Frame`, а не готовый capsule.
+
+Подробная таблица возвращаемых типов, блокировки, пропусков кадров и примеры — в [reading-models.md](reading-models.md). Доступные методы конкретных классов кадров — в [memory-and-frames.md](memory-and-frames.md).
 
 ## Жизненный цикл
 
@@ -77,6 +67,7 @@ with Reader("video.mp4", name="demo") as reader:
 - `is_opened()` — читатель не остановлен и не находится в `STOPPED`. Это не обещание, что уже получен валидный кадр.
 - `is_alive()` — был ли недавно опубликован кадр относительно `degraded_timeout_sec`.
 - `warmuped` — опубликован хотя бы один кадр (`frames_processed > 0`).
+- `get_last_exception()` — возвращает последнюю сохранённую терминальную ошибку (`RuntimeError` или `None`), не выбрасывая её сам. Через `WrappedReader` getter недоступен после `stop()`, поскольку обёртка очищает `_impl`.
 
 `State`: `INIT`, `CONNECTING`, `STREAMING`, `DEGRADED`, `STOPPED`. Через `._on_state_change(name, old, new)` можно переопределить обработчик логирования состояний в Python-наследнике/обёртке; прямой публичный метод `set_state_callback()` есть у C++ класса, но не выведен как отдельный метод WrappedReader.
 
@@ -88,7 +79,3 @@ with Reader("video.mp4", name="demo") as reader:
 - `last_pts_seconds`: PTS текущего кадра в секундах.
 - `last_recv_time`: монотонное время последней публикации, не Unix timestamp.
 - `state`, `name` -- текущее состояние и имя.
-
-### Подорбнее
-
-cм. [memory-and-frames.md](memory-and-frames.md), [architecture.md](architecture.md)

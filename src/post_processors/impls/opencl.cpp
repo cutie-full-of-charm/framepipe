@@ -1,4 +1,7 @@
-// src/post_processors/impls/opencl.cpp
+/*
+ * src/post_processors/impls/opencl.cpp
+ * SPDX-License-Identifier: MPL-2.0
+ */
 #include "opencl.hpp"
 #include "../../_base.hpp"
 #include "../../frame.hpp"

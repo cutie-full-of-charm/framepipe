@@ -1,4 +1,7 @@
-// src/gpu/cuda.cu
+/*
+ * src/gpu/cuda.cu
+ * SPDX-License-Identifier: MPL-2.0
+ */
 #include "cuda.hpp"
 #include <cmath>
 #include <cstddef>

@@ -18,7 +18,7 @@
 | `CudaFrame` | CUDA device buffer | `.cuda_ptr`, `.cuda_context_handle`, `.dlpack()` | packed uint8, RGB/BGR/GRAY |
 | `VaapiFrame` | VAAPI hardware surface | `.surface_id` | GPU `NATIVE`, `pix_fmt="vaapi"` |
 | `OpenCLBufferFrame` | OpenCL `cl_mem` buffer | `.opencl_buffer_handle`, `.opencl_context_handle`, `.dlpack()` | packed uint8 |
-| `OpenCLImageFrame` | длва OpenCL image plane | `.opencl_plane_handles`, `.opencl_context_handle` | NV12 `NATIVE`: Y и UV images |
+| `OpenCLImageFrame` | два OpenCL image plane | `.opencl_plane_handles`, `.opencl_context_handle` | NV12 `NATIVE`: Y и UV images |
 
 Для каждого типа доступны свойства базового `Frame`: `width`, `height`, `src_width`, `src_height`, `channels`, `pix_fmt`, `pts`, `ts`, `id`, `key`, `memory_type`. `pts` -- значение во временной базе видеопотока (не секунды), `ts` -- monotonic timestamp публикации кадра (берется не из rtsp метаданных, а фиксируется потоком декодирования). `reader.last_pts_seconds` возвращает PTS последнего хранимого кадра в секундах.
 
@@ -34,9 +34,9 @@ elif isinstance(frame, CpuPlanarFrame):
     planes = frame.planes()  # только yuv420p / yuvj420p / nv12
 ```
 
-`CpuPackedFrame.array()` строит numpy-view с корректным stride строки и удерживает владельца памяти, пока view жив. Для `nv12`: `planes()` возвращает Y `(H, W)` и UV `(ceil(H/2), 2*ceil(W/2))`, для `yuv420p`/`yuvj420p` возвращает Y `(H, W)` и U/V `(ceil(H/2), ceil(W/2))`. Это представления плоскостей, для условного RGB нужна конверсия цвета (`vaapi_scale`, `swscale`, etc.).
+`CpuPackedFrame.array()` строит numpy-view с корректным stride строки и удерживает владельца памяти, пока view жив. `planes()` возвращает представления плоскостей, а не готовый RGB: формы Y/UV для NV12 и Y/U/V для YUV420P указаны в [pixel-formats-and-color.md](pixel-formats-and-color.md).
 
-Ограничение: `NATIVE` может обозначать и другие FFMPEG pix_fmt (10-битные), объект будет `CpuPlanarFrame`, но `.planes()` выдаст ошибку, если формат не из списка реализованыых, `NATIVE` это не уникальный доступ к плоскостям любого формата.
+Ограничение: `NATIVE` может обозначать и другие FFMPEG pix_fmt (10-битные), объект будет `CpuPlanarFrame`, но `.planes()` выдаст ошибку, если формат не из списка реализованных, `NATIVE` это не уникальный доступ к плоскостям любого формата.
 
 ### CUDA / PyTorch / DLPack
 
@@ -67,10 +67,4 @@ with Reader(
 
 ## Доступ к кадру через `Reader`
 
-- `read_frame()`, `read_new_frame()`, `read_latest_frame(timeout)`, `next_frame()` возвращают объекты `Frame`, подходят для native/GPU случаев.
-- `read()`, `read_new()`, `read_latest(timeout)` возвращают numpy.ndarray, только если в обёртке запрошены `MemoryType.CPU` и `BGR24`/`RGB24`/`GRAY8`, в остальных случаях бросает `RuntimeError`.
-- `next()` и `retrieve()` делегируются в C++ с попыткой получить numpy: используйте их только с packed CPU-выходом, для других типов безопаснее `next_frame()` и `read_*_frame()`.
-- `read_dlpack()` / `read_new_dlpack()` возвращают Frame, который может служить DLPack producer для поддерживаемых packed CPU/CUDA/OpenCLBuffer типов, это не готовый DLPack capsule. Для planar/image/surface типов экспорт не реализован.
-- `read_tensor()` / `read_new_tensor()` конвертируют кадр через PyTorch для поддерживаемых CPU/CUDA путей, OpenCL отклоняется явно.
-
-Подробнее о семантике чтения и `on_demand`: [reader-api.md](reader-api.md).
+Методы с `_frame` возвращают объект `Frame` (в том числе для `NATIVE` и GPU), а NumPy-варианты требуют packed CPU. `read_dlpack()` и `read_new_dlpack()` возвращают `Frame` как DLPack producer, а не готовый capsule; `read_tensor()` / `read_new_tensor()` используют PyTorch и явно отклоняют OpenCL. `next()` и `retrieve()` также рассчитаны на packed CPU.

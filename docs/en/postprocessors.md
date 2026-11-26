@@ -1,74 +1,65 @@
 # Postprocessors (`PostProcessor`)
 
-> Documented version: `0.4.2.dev4`. This page describes how frames are processed. Support for additional formats and color matrices is evolving. See the [compatibility matrix](compatibility.md).
+> Version at the time of writing: `0.4.2.dev4`.  
+> This page describes the frame processing path. The implementation is still evolving, including its handling of color matrices and formats.  
+> General table: [compatibility.md](compatibility.md).
 
-## Overview
-
-| Postprocessor | Required decoder | Input format | Output formats | Output location | Resizing | Color-matrix behavior |
-| --- | --- | --- | --- | --- | --- | --- |
-| `CPU` | SOFTWARE / CUDA / VAAPI / D3D11VA | Software `AVFrame`, directly or after hardware download | BGR24, RGB24, GRAY8, NATIVE | CPU | Yes, except NATIVE | FFmpeg swscale; no explicit matrix selection |
-| `CUDA` | CUDA | CUDA surface, `sw_format=NV12` | BGR24, RGB24, GRAY8 | CPU or CUDA GPU | Bilinear algorithm in CUDA kernel | Fixed BT.709 limited for RGB/BGR |
-| `VAAPI` | VAAPI | VAAPI surface | BGR24, RGB24, GRAY8, NATIVE | CPU; GPU only for NATIVE | `scale_vaapi` | VPP without explicit matrix configuration; swscale for CPU conversion |
-| `OPENCL` | VAAPI | 8-bit NV12 VAAPI surface | BGR24, RGB24, GRAY8, NATIVE | CPU or OpenCL GPU | Yes for packed; no resizing for NATIVE | Supports matrix, range, and chroma-location metadata |
+The combinations of `HWAccel` / `PostProcessor` / `MemoryType` / `OutputFormat` are listed in [compatibility.md](compatibility.md). Below is what each postprocessor actually does, including input limitations and where copies take place.
 
 ## `PostProcessor.CPU`
 
-Implementation references: `src/post_processors/impls/cpu.cpp`, `src/post_processors/transfer.hpp`.
+Implementation files: `src/post_processors/impls/cpu.cpp`, `src/post_processors/transfer.hpp`.
 
-- For GPU decoding backends, the input surface is first downloaded to host memory using `av_hwframe_transfer_data()`.
-- Packed output is created via `sws_getCachedContext()` and `sws_scale()` with `SWS_BILINEAR`, supporting `RGB24`, `BGR24`, `GRAY8`, and resizing.
-- If both dimensions and pixel format already match, the implementation may pass through an `AVFrame` reference instead of performing an unnecessary conversion.
-- `NATIVE` clones the original software `AVFrame` and exposes a `CpuPlanarFrame`, without resizing. Its `.planes()` method is implemented only for `yuv420p`, `yuvj420p`, and `nv12`.
-- The code does not explicitly select YCbCr-to-RGB coefficients from `src->colorspace` or `color_range`; the resulting behavior depends on libswscale.
+- With GPU decoders, the input surface is first downloaded to the CPU using `av_hwframe_transfer_data()`.
+- For packed output, `sws_getCachedContext()` and `sws_scale()` with `SWS_BILINEAR` are used: `RGB24`, `BGR24`, `GRAY8`, and resizing are supported.
+- If the dimensions and pix_fmt already match, the frame is passed through by reference to the AVFrame instead of performing an unnecessary conversion.
+- `NATIVE` clones the source software AVFrame and exposes a `CpuPlanarFrame`; resizing is forbidden in this case. However, `planes()` is implemented only for `yuv420p`, `yuvj420p`, and `nv12`.
+- The code does not explicitly select YCbCr->RGB coefficients from `src->colorspace`/`color_range`; the exact conversion depends on libswscale's implementation.
 
-`MemoryType.CPU` can be used with each implemented decoder, provided hardware download and processing support the actual frame format.
+Combinations: `MemoryType.CPU` can be used with any implemented decoder, provided that its format can be successfully downloaded and processed.
 
 ## `PostProcessor.CUDA`
 
-Implementation references: `src/post_processors/impls/cuda.cpp`, `src/gpu/cuda.cu`.
+Implementation files: `src/post_processors/impls/cuda.cpp`, `src/gpu/cuda.cu`.
 
-- Only supported with `HWAccel.CUDA`; input must be an `AV_PIX_FMT_CUDA` surface with `sw_format=AV_PIX_FMT_NV12`.
-- The CUDA kernel performs bilinear resizing and, where needed, NV12-to-RGB/BGR conversion.
-- `GRAY8` takes the Y plane. `RGB24` and `BGR24` use hard-coded **BT.709 limited-range** coefficients; the kernel ignores source color metadata in `0.4.2.dev4`.
-- `MemoryType.GPU` returns a packed `uint8` `CudaFrame` (with DLPack support). `MemoryType.CPU` downloads the converted packed result to RAM.
-
-**Color warning:** the CUDA conversion path cannot promise accurate color for BT.601/BT.2020 matrices, full-range video, or incompatible chroma layouts. If precise color is important, inspect source metadata and consider another processing path.
+- Only supported with `HWAccel.CUDA`; input must be `AV_PIX_FMT_CUDA` with `sw_format=AV_PIX_FMT_NV12`.
+- A CUDA kernel performs bilinear resizing and, if necessary, NV12->RGB/BGR conversion.
+- `GRAY8` comes from the Y plane; `RGB24`/`BGR24` use fixed BT.709 limited. The kernel ignores matrix and range metadata. The formula is given in [pixel-formats-and-color.md](pixel-formats-and-color.md).
+- `MemoryType.GPU` -> `CudaFrame` containing packed `uint8` (with DLPack); `MemoryType.CPU` -> download of the converted packed result into RAM.
 
 ## `PostProcessor.VAAPI`
 
-Implementation reference: `src/post_processors/impls/vaapi.cpp`.
+Implementation file: `src/post_processors/impls/vaapi.cpp`.
 
-- Requires `HWAccel.VAAPI` and a hardware VAAPI `AVFrame` on Linux.
-- Without resizing, the surface passes through without a filter.
-- With resizing, the FFmpeg graph is `buffer → scale_vaapi → buffersink`.
-- **GPU output:** only `OutputFormat.NATIVE`; returns a `VaapiFrame` with `pix_fmt="vaapi"` and `surface_id`. This postprocessor does not convert to RGB while keeping the result as a VAAPI surface.
-- **CPU output:** downloads the VAAPI surface. `NATIVE` retains the downloaded software pixel format; RGB/BGR/GRAY conversions use `sws_scale`.
-- `scale_vaapi` is not configured with explicit color-matrix options. Download formats depend on FFmpeg and the driver.
+- Only supported with `HWAccel.VAAPI` and a hardware VAAPI AVFrame (Linux).
+- If no resize is required, the surface is passed through without a filter.
+- If the size changes, the FFmpeg graph `buffer -> scale_vaapi -> buffersink` is used.
+- GPU output: only `OutputFormat.NATIVE`; returns a `VaapiFrame` with `pix_fmt="vaapi"` and an accessible `surface_id`. This postprocessor does not convert to RGB.
+- CPU output: the frame is downloaded from VAAPI; `NATIVE` keeps the downloaded software pix_fmt, while RGB/BGR/GRAY are produced via `sws_scale`.
+- `scale_vaapi` is not configured with color-matrix parameters. The downloaded surface format depends on FFmpeg/the driver.
 
-VAAPI manages surfaces and resizing; `PostProcessor.OPENCL` is a separate route for GPU-side NV12-to-packed conversion with deliberate color-matrix selection.
+VAAPI and OpenCL serve different purposes: VAAPI handles surfaces and resizing; the separate `PostProcessor.OPENCL` performs NV12->packed conversion on the GPU with an explicit choice of color matrix.
 
 ## `PostProcessor.OPENCL`
 
-Implementation references: `src/post_processors/impls/opencl.cpp`, `src/gpu/nv12_convert.cl`.
+Implementation files: `src/post_processors/impls/opencl.cpp`, `src/gpu/nv12_convert.cl`.
 
-- Requires a Linux build with OpenCL, `HWAccel.VAAPI`, an 8-bit NV12 VAAPI surface, and working VAAPI-to-OpenCL interoperability.
-- NV12 Y and UV planes are mapped as OpenCL images. For `BGR24`, `RGB24`, and `GRAY8`, the kernel converts and resizes them using bilinear sampling.
-- Packed output with `MemoryType.GPU` yields `OpenCLBufferFrame` (`cl_mem`); with `MemoryType.CPU`, it yields `CpuPackedFrame`.
-- `OutputFormat.NATIVE` is supported only at the original dimensions: as `OpenCLImageFrame` on GPU or `CpuPlanarFrame` with NV12 on CPU.
-- Color support includes BT.709, BT.601 (BT.470BG/SMPTE 170M), BT.2020 NCL, SMPTE 240M, and FCC. `UNSPECIFIED` falls back to BT.601 with a warning; other unrecognized values raise an error. Full/limited range and several chroma locations are supported; see [pixel formats and color](pixel-formats-and-color.md).
-- Packed OpenCL DLPack output advertises an OpenCL device (`device_type=4`). This is **not CUDA**, and the maintainer's `torch.from_dlpack()` test did not succeed in `0.4.2.dev4`.
+- Requires a Linux build with OpenCL detected, a `HWAccel.VAAPI` decoder, an NV12 (8-bit) VAAPI input surface, and successful VAAPI->OpenCL interop.
+- NV12 planes are mapped as OpenCL Y/UV images; for `BGR24`/`RGB24`/`GRAY8`, the kernel performs bilinear resize and conversion.
+- `MemoryType.GPU` + packed -> `OpenCLBufferFrame` (`cl_mem`); `MemoryType.CPU` + packed -> `CpuPackedFrame`.
+- `OutputFormat.NATIVE` is supported only at source dimensions: on GPU this is an `OpenCLImageFrame`, on CPU a `CpuPlanarFrame` with NV12.
+- Color: matrix, range, and chroma-location metadata are taken into account; unknown values have specific fallback rules or cause an error. Exact variants and defaults are documented in [pixel-formats-and-color.md](pixel-formats-and-color.md).
+- Packed OpenCL DLPack identifies the device as OpenCL (device_type=4). It is not CUDA; `torch.from_dlpack()` did not work for me in `0.4.2.dev4`.
 
-## Where transfers and copies happen
+## Where copies happen
 
-| Path (decoder → postprocessor → output) | Memory operation |
+| Path (decode -> postprocessor -> CPU/GPU placement) | Memory operation |
 | --- | --- |
-| SOFTWARE → CPU → CPU RAM | CPU conversion, with a new buffer when needed |
-| CUDA → CPU → CPU RAM | Hardware-to-host transfer before processing |
-| CUDA → CUDA → GPU VRAM | CUDA kernel; final output stays in device memory |
-| CUDA → CUDA → CPU RAM | CUDA kernel followed by GPU-to-CPU transfer |
-| VAAPI → VAAPI → GPU NATIVE | VAAPI surface/pass-through or scaling; no mandatory CPU download |
-| VAAPI → VAAPI → CPU | VAAPI processing followed by download and optional swscale |
-| VAAPI → OPENCL → GPU | VAAPI-to-OpenCL mapping, then a kernel or direct plane exposure |
-| VAAPI → OPENCL → CPU | VAAPI-to-OpenCL mapping followed by download of the result |
-
-**Note:** "no CPU download" does not mean zero GPU allocations or device-side copies. The phrase **zero-copy** in example 06 primarily refers to passing an already prepared CUDA buffer to PyTorch using DLPack, not to the entire video decode pipeline.
+| CPU -> CPU postprocessor -> CPU RAM | CPU conversion, a new buffer if needed |
+| CUDA -> CPU postprocessor -> CPU RAM | HW -> CPU before processing |
+| CUDA -> CUDA postprocessor -> GPU VRAM | CUDA kernel; result stays on the CUDA GPU and never leaves the graphics card |
+| CUDA -> CUDA postprocessor -> CPU RAM | CUDA kernel, then GPU -> CPU download |
+| VAAPI -> VAAPI postprocessor -> GPU NATIVE | VAAPI surface/scale, no mandatory CPU download |
+| VAAPI -> VAAPI postprocessor -> CPU | VAAPI surface/scale, then HW -> CPU and swscale if needed |
+| VAAPI -> OPENCL postprocessor -> GPU | VAAPI -> OpenCL mapping, then OpenCL kernel or plane export |
+| VAAPI -> OPENCL postprocessor -> CPU | VAAPI -> OpenCL mapping and result download |

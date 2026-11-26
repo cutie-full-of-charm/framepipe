@@ -72,7 +72,7 @@ def videos():
         logger.success("videoset found, generation skipped")
     else:
         logger.info("generating videoset")
-        gen_videoset()
+        gen_videoset(mode="test")
 
     videos = {
         filename: os.path.join(VIDEO_CACHE_DIR, filename)

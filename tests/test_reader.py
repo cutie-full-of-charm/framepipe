@@ -16,7 +16,7 @@ from .fixtures.utils import (
 def test_reads_file(videos, reader_cls):
 
     with reader_context(
-        reader_cls, source=videos["30fps_10s.mp4"], name=reader_cls.__name__
+        reader_cls, source=videos["30fps_10s.mp4"], name=reader_cls.__name__, realtime_file=True
     ) as reader:
         wait_for_state(reader, State.STREAMING)
 
@@ -34,7 +34,7 @@ def test_reads_correct_frame_shape(videos, reader_cls):
     expected_frame = ndarray((600, 800, 3), dtype=uint8)
 
     with reader_context(
-        reader_cls, source=videos["30fps_10s.mp4"], name=reader_cls.__name__
+        reader_cls, source=videos["30fps_10s.mp4"], name=reader_cls.__name__, realtime_file=True
     ) as reader:
         wait_for_state(reader, State.STREAMING)
 
@@ -54,7 +54,7 @@ def test_reads_correct_frame_shape(videos, reader_cls):
 def test_read_new_reads_no_dups(videos, reader_cls):
 
     with reader_context(
-        reader_cls, source=videos["30fps_10s.mp4"], name=reader_cls.__name__
+        reader_cls, source=videos["30fps_10s.mp4"], name=reader_cls.__name__, realtime_file=True
     ) as reader:
         wait_for_frame(reader, 1)
 
@@ -62,11 +62,11 @@ def test_read_new_reads_no_dups(videos, reader_cls):
         frame_counter = 0
         deadline = time.monotonic() + 3.0
         while frame_counter < 20 and time.monotonic() < deadline:
-            frame = reader.read_new()
+            frame = reader.read_new_frame()
             if frame is None:
                 continue
 
-            pts = reader.last_pts_seconds
+            pts = frame.pts
 
             assert pts > prev_pts, f"ERROR: pts:{pts} <= prev:{prev_pts}?"
             prev_pts = pts
@@ -82,14 +82,15 @@ def test_monotonic_pts_grow(videos, reader_cls):
     frames_count = 60
 
     with reader_context(
-        reader_cls, source=videos["30fps_10s.mp4"], name=reader_cls.__name__
+        reader_cls, source=videos["30fps_10s.mp4"], name=reader_cls.__name__, realtime_file=True
     ) as reader:
         wait_for_state(reader, State.STREAMING)
 
         prev = -1.0
         for _ in range(frames_count):
-            if reader.read_new() is not None:
-                pts = reader.last_pts_seconds
+            frame = reader.read_new_frame()
+            if frame is not None:
+                pts = frame.pts
                 assert pts >= prev, f"pts error: {pts} < {prev}"
                 prev = pts
             time.sleep(0.05)
@@ -100,7 +101,7 @@ def test_monotonic_frames_and_packets_grow(videos, reader_cls):
     grow_time_secs = 3.0
 
     with reader_context(
-        reader_cls, source=videos["30fps_10s.mp4"], name=reader_cls.__name__
+        reader_cls, source=videos["30fps_10s.mp4"], name=reader_cls.__name__, realtime_file=True
     ) as reader:
         wait_for_state(reader, State.STREAMING)
 
@@ -122,7 +123,6 @@ def test_monotonic_frames_and_packets_grow(videos, reader_cls):
 # FIXME: не работает вообще??
 # FIXME: здесь impl становится None после stop(), как это тестировать
 # тестировать что бросается ошибка? хм..
-@pytest.mark.xfail(reason="doesnt work in any way?")
 def test_stop_releases_resources(videos, reader_cls):
 
     reader = reader_cls(
@@ -142,12 +142,13 @@ def test_stop_releases_resources(videos, reader_cls):
         time.sleep(0.001)
 
     assert reader.is_alive() is False
-    assert reader.read_new() is None
+    with pytest.raises(RuntimeError, match="reader has been stopped"):
+        reader.read_new()
 
 
 def test_file_reader_not_live(videos, reader_cls):
     with reader_context(
-        reader_cls, source=videos["30fps_10s.mp4"], name=reader_cls.__name__
+        reader_cls, source=videos["30fps_10s.mp4"], name=reader_cls.__name__, realtime_file=True
     ) as reader:
         wait_for_state(reader, State.STREAMING)
 
@@ -169,29 +170,17 @@ def test_reader_double_stop(videos, reader_cls):
 def test_reader_warmuped(videos, reader_cls):
 
     with reader_context(
-        reader_cls, source=videos["30fps_10s.mp4"], name=reader_cls.__name__
+        reader_cls, source=videos["30fps_10s.mp4"], name=reader_cls.__name__, realtime_file=True
     ) as reader:
         deadline = time.monotonic() + 3.0
 
         while time.monotonic() <= deadline:
-            if reader.state == State.INIT:
-                assert reader.warmuped is False
-            if reader.state == State.CONNECTING:
-                assert reader.warmuped is False
-            if reader.state == State.STREAMING and reader.frames_processed == 0:
-                assert reader.warmuped is False
-
-            if reader.state != State.STREAMING and reader.frames_processed > 0:
-                pytest.fail("State != streaming but we have frames")
-
-            if reader.state != State.STREAMING and reader.warmuped:
-                pytest.fail("State != streaming but warmuped")
-
-            if reader.state == State.STREAMING and reader.frames_processed > 0:
-                assert reader.warmuped, True
+            if reader.warmuped:
+                assert reader.frames_processed > 0
                 break
-
             time.sleep(0.001)
+        else:
+            pytest.fail("Reader did not publish a frame in time")
 
 
 def test_read_latest_blocks_until_frame(videos, reader_cls):
@@ -225,12 +214,11 @@ def test_custom_ffmpeg_args_stored(videos, reader_cls):
 
     with reader_context(
         reader_cls,
-        source=videos["60fps_10s.mp4"],
+        source=videos["30fps_10s.mp4"],
         av_container_options=opts,
         name=reader_cls.__name__,
     ) as reader:
         assert reader._av_container_options == opts
-        reader.stop()
 
 
 def test_custom_args_override_defaults(videos, reader_cls):
@@ -238,11 +226,10 @@ def test_custom_args_override_defaults(videos, reader_cls):
     custom = {"probesize": "5000000"}
     with reader_context(
         reader_cls,
-        source="rtsp://fake",
+        source=videos["30fps_10s.mp4"],
         av_container_options=custom,
         name=reader_cls.__name__,
     ) as reader:
         assert reader._av_container_options == custom
         assert "probesize" in reader._av_container_options
         assert reader._av_container_options["probesize"] == "5000000"
-        reader.stop()

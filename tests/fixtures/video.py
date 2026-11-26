@@ -332,16 +332,50 @@ def generate_video(
     )
 
 
-# FIXME: добавить также видео, где GOP между i-frame будет не 30 кадров (~1сек.)
-# а 2/4 секунды, как с этим справится ридер?
-
-
 # videoset:
-TEST_VIDEOSET = []
-BENCH_VIDEOSET = []
+FULL_VIDEOSET = [
+    "h264_360p.mp4",
+    "h264_720p.mp4",
+    "h264_1080p.mp4",
+    "h264_2160p.mp4",
+    "h265_360p.mp4",
+    "h265_720p.mp4",
+    "h265_1080p.mp4",
+    "h265_2160p.mp4",
+    "h264_gop1.mp4",
+    "h264_gop60.mp4",
+    "h264_gop120.mp4",
+    "h265_gop1.mp4",
+    "h265_gop60.mp4",
+    "h265_gop120.mp4",
+    "h264_bf0.mp4",
+    "25fps_10s.mp4",
+    "60fps_10s.mp4",
+    "30fps_10s.mp4",
+    "30fps_30s.mp4",
+    "30fps_5s.mp4",
+    "bt601_tv.mp4",
+    "bt470bg_tv.mp4",
+    "bt2020_tv.mp4",
+    "bt709_pc.mp4",
+    "bt601_pc.mp4",
+    "bt2020_pc.mp4",
+    "h264_422.mp4",
+    "h264_444.mp4",
+    "h265_10bit.mp4",
+    "h265_10bit_bt2020.mp4",
+    "noise0.mp4",
+    "noise24.mp4",
+    "vp9_720p.webm",
+    "vp9_1080p.webm",
+]
 
-# FIXME: сделать явное разделение на тестовый/бенч видеосеты по аргументу
-def gen_videoset():
+TEST_VIDEOSET = [
+    "30fps_10s.mp4"
+]
+
+#                mode= "test" | "bench"
+def gen_videoset(mode):
     VIDEO_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
     videos = []
@@ -352,67 +386,67 @@ def gen_videoset():
             generate_video(path, **kwargs)
         videos.append(path)
 
-    # NOTE & BENCH: закоменченные видео размечены под бенчмарки,
-    #               под текущие (0.4.2.dev2) тесты достаточно части C
-    #               (на самом деле 1 видео из части C)
+    if mode == "test":
+        add("30fps_10s.mp4", fps=30, duration=10, resolution="800x600")
 
-    # A) Разрешения и кодеки (8 видео)
-    # add("h264_360p.mp4", resolution="640x360")
-    # add("h264_720p.mp4", resolution="1280x720")
-    # add("h264_1080p.mp4", resolution="1920x1080")
-    add("h264_2160p.mp4", resolution="3840x2160")
+    if mode == "bench":
+        # A) Разрешения и кодеки (8 видео)
+        add("h264_360p.mp4", resolution="640x360")
+        add("h264_720p.mp4", resolution="1280x720")
+        add("h264_1080p.mp4", resolution="1920x1080")
+        add("h264_2160p.mp4", resolution="3840x2160")
 
-    # add("h265_360p.mp4", codec="h265", resolution="640x360")
-    # add("h265_720p.mp4", codec="h265", resolution="1280x720")
-    # add("h265_1080p.mp4", codec="h265", resolution="1920x1080")
-    add("h265_2160p.mp4", codec="h265", resolution="3840x2160")
+        add("h265_360p.mp4", codec="h265", resolution="640x360")
+        add("h265_720p.mp4", codec="h265", resolution="1280x720")
+        add("h265_1080p.mp4", codec="h265", resolution="1920x1080")
+        add("h265_2160p.mp4", codec="h265", resolution="3840x2160")
 
-    # B) GOP и B-frames (7 видео)
-    # add("h264_gop1.mp4", gop=1)
-    # add("h264_gop60.mp4", gop=60)
-    # add("h264_gop120.mp4", gop=120)
+        # B) GOP и B-frames (7 видео)
+        add("h264_gop1.mp4", gop=1)
+        add("h264_gop60.mp4", gop=60)
+        add("h264_gop120.mp4", gop=120)
 
-    # add("h265_gop1.mp4", codec="h265", gop=1)
-    # add("h265_gop60.mp4", codec="h265", gop=60)
-    # add("h265_gop120.mp4", codec="h265", gop=120)
+        add("h265_gop1.mp4", codec="h265", gop=1)
+        add("h265_gop60.mp4", codec="h265", gop=60)
+        add("h265_gop120.mp4", codec="h265", gop=120)
 
-    # add("h264_bf0.mp4", bframes=0)
+        add("h264_bf0.mp4", bframes=0)
 
-    # C) FPS и длительность (5 видео)
-    add("25fps_10s.mp4", fps=25, duration=10, resolution="800x600")
-    add("60fps_10s.mp4", fps=60, duration=10, resolution="800x600")
-    add("30fps_10s.mp4", fps=30, duration=10, resolution="800x600")
-    add("30fps_30s.mp4", fps=30, duration=30, resolution="800x600")
-    add("30fps_5s.mp4", fps=30, duration=5, resolution="800x600")
+        # C) FPS и длительность (5 видео)
+        add("25fps_10s.mp4", fps=25, duration=10, resolution="800x600")
+        add("60fps_10s.mp4", fps=60, duration=10, resolution="800x600")
+        add("30fps_10s.mp4", fps=30, duration=10, resolution="800x600")
+        add("30fps_30s.mp4", fps=30, duration=30, resolution="800x600")
+        add("30fps_5s.mp4", fps=30, duration=5, resolution="800x600")
 
-    # D) Цветовые матрицы и range (6 видео)
-    # add("bt601_tv.mp4", matrix="bt601")
-    # add("bt470bg_tv.mp4", matrix="bt470bg")
-    # add("bt2020_tv.mp4", matrix="bt2020")
+        # D) Цветовые матрицы и range (6 видео)
+        add("bt601_tv.mp4", matrix="bt601")
+        add("bt470bg_tv.mp4", matrix="bt470bg")
+        add("bt2020_tv.mp4", matrix="bt2020")
 
-    # add("bt709_pc.mp4", matrix="bt709", color_range="pc")
-    # add("bt601_pc.mp4", matrix="bt601", color_range="pc")
-    # add("bt2020_pc.mp4", matrix="bt2020", color_range="pc")
+        add("bt709_pc.mp4", matrix="bt709", color_range="pc")
+        add("bt601_pc.mp4", matrix="bt601", color_range="pc")
+        add("bt2020_pc.mp4", matrix="bt2020", color_range="pc")
 
-    # E) Форматы пикселей (4 видео)
-    # add("h264_422.mp4", pix_fmt="yuv422p")
-    # add("h264_444.mp4", pix_fmt="yuv444p")
+        # E) Форматы пикселей (4 видео)
+        add("h264_422.mp4", pix_fmt="yuv422p")
+        add("h264_444.mp4", pix_fmt="yuv444p")
 
-    # add("h265_10bit.mp4", codec="h265", pix_fmt="yuv420p10le")
-    # add(
-    #     "h265_10bit_bt2020.mp4",
-    #     codec="h265",
-    #     pix_fmt="yuv420p10le",
-    #     matrix="bt2020",
-    # )
+        add("h265_10bit.mp4", codec="h265", pix_fmt="yuv420p10le")
+        add(
+            "h265_10bit_bt2020.mp4",
+            codec="h265",
+            pix_fmt="yuv420p10le",
+            matrix="bt2020",
+        )
 
-    # F) Уровень шума (2 видео)
-    # add("noise0.mp4", noise=0)
-    # add("noise24.mp4", noise=24)
+        # F) Уровень шума (2 видео)
+        add("noise0.mp4", noise=0)
+        add("noise24.mp4", noise=24)
 
-    # G) VP9 (2 видео)
-    # add("vp9_720p.webm", codec="vp9", resolution="1280x720")
-    # add("vp9_1080p.webm", codec="vp9", resolution="1920x1080")
+        # G) VP9 (2 видео)
+        add("vp9_720p.webm", codec="vp9", resolution="1280x720")
+        add("vp9_1080p.webm", codec="vp9", resolution="1920x1080")
 
     logger.success(f"Videoset ready: {len(videos)} videos in {VIDEO_CACHE_DIR}")
     return videos
@@ -421,11 +455,8 @@ def gen_videoset():
 def test_videoset_exists():
     if not VIDEO_CACHE_DIR.exists():
         return False
-    # TESTFIXME: не забывать расширять проверку по мере расширения тестов
-    if not Path(VIDEO_CACHE_DIR / "30fps_10s.mp4").exists():
-        return False
-    if not Path(VIDEO_CACHE_DIR / "h265_2160p.mp4").exists():
-        return False
-    if not Path(VIDEO_CACHE_DIR / "h264_2160p.mp4").exists():
-        return False
+    for vid_path in TEST_VIDEOSET:
+        if not Path(VIDEO_CACHE_DIR / vid_path).exists():
+            return False
+
     return True

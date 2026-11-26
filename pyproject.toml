@@ -1,6 +1,6 @@
 [project]
 name = "framepipe"
-version = "0.4.2.dev5"
+version = "0.4.3"
 requires-python = ">=3.10"
 license = "MPL-2.0"
 license-files = ["LICENSE"]

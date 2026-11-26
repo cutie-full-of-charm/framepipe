@@ -1,10 +1,14 @@
-// src/reader.hpp
+/*
+ * src/reader.hpp
+ * SPDX-License-Identifier: MPL-2.0
+ */
 #pragma once
 #include "_base.hpp"
 #include "frame.hpp"
 #include <atomic>
 #include <condition_variable>
 #include <cstdint>
+#include <exception>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -75,9 +79,10 @@ class Reader {
     std::string hwaccel_active = "SOFTWARE";
 
     std::function<void(const std::string &, const std::string &, const std::string &)> _on_state_change;
+    std::exception_ptr get_last_exception() const;
 
   private:
-    void _loop();
+    void _loop() noexcept;
     void _run_stream();
     bool _await_frame_request();
     void _set_state(State new_state);
@@ -129,4 +134,6 @@ class Reader {
     double _scale = 1.0;
     PostProcessor _postprocessor_requested;
     MemoryType _output_memory_requested;
+
+    std::exception_ptr _last_exception;
 };

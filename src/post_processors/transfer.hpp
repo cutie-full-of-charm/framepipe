@@ -1,4 +1,7 @@
-// src/post_processors/transfer.hpp
+/*
+ * src/post_processors/transfer.hpp
+ * SPDX-License-Identifier: MPL-2.0
+ */
 #pragma once
 
 #include "../_base.hpp"

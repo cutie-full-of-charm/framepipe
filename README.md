@@ -1,6 +1,6 @@
 # framepipe 
 
-**Russian:** [README.ru.md](README.ru.md) · [Русская документация](docs/ru/README.md)
+**Russian:** [README.ru.md](README.ru.md) | [Русская документация](docs/ru/README.md)
 
 **framepipe** is a Python library for decoding and preparing video frames from files and network streams. It uses FFmpeg through a C++ binding and provides CPU arrays or supported GPU-backed frame objects.
 
@@ -16,7 +16,7 @@ Originally built for **real-time ML/CV and edge inference**, framepipe now also 
 - NumPy arrays for packed CPU output; typed frame objects, DLPack, and native GPU handles on supported paths.
 - Latest-frame background reading and on-demand sequential file reading.
 
-**Support depends on the entire decoder → postprocessor → format → memory combination**, not just on individual enum values. See the [compatibility matrix](docs/en/compatibility.md) before selecting a GPU path.
+**Support depends on the entire decoder -> postprocessor -> format -> memory combination**, not just on individual enum values. See the [compatibility matrix](docs/en/compatibility.md) before selecting a GPU path.
 
 ## Quick start
 
@@ -64,9 +64,8 @@ For GPU or `NATIVE` output, prefer the methods ending in `_frame`, such as `read
 | Format and color handling | [Pixel formats and color](docs/en/pixel-formats-and-color.md) |
 | `read` / `read_new` / `read_latest` / `on_demand` | [Reading models](docs/en/reading-models.md) |
 | Reader methods and options | [Reader API](docs/en/reader-api.md) |
-| Maturity and known limitations | [Support status](docs/en/support-status.md) |
 
 This is a **development snapshot**, not a claim of universal hardware or codec compatibility. More formats, improved color handling, broader platform testing, and API refinements are planned.
 
-
-License: MPL 2.0 (see `LICENSE`).
+## Лицензия
+Code is licensed under MPL 2.0 (see `LICENSE`).

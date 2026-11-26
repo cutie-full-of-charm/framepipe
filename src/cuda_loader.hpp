@@ -1,4 +1,7 @@
-// src/cuda_loader.hpp
+/*
+ * src/cuda_loader.hpp
+ * SPDX-License-Identifier: MPL-2.0
+ */
 #pragma once
 
 #include "_base.hpp"

@@ -1,4 +1,7 @@
-// src/drivers.cpp
+/*
+ * src/drivers.cpp
+ * SPDX-License-Identifier: MPL-2.0
+ */
 #include <cstdlib>
 #include <filesystem>
 #include <stdlib.h>

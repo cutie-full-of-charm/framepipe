@@ -1,7 +1,13 @@
 import argparse
 import time
 
-from framepipe import HWAccel, OutputFormat, Reader
+from framepipe import (
+    CpuPackedFrame,
+    CpuPlanarFrame,
+    HWAccel,
+    OutputFormat,
+    Reader,
+)
 
 _MAP = {
     "software": HWAccel.SOFTWARE,
@@ -33,21 +39,35 @@ def main(source: str, hwaccel: str) -> None:
             consumed += 1
 
             if consumed == 1:
-                if reader._out_format == OutputFormat.NATIVE:
+                if isinstance(frame, CpuPlanarFrame):
                     planes = frame.planes()
                     print(
-                        f"Received frame: OutputFormat.Native, planes_shape={[p.shape for p in planes]}, pix_fmt={frame.pix_fmt}"
+                        f"First frame: CpuPlanarFrame (native), "
+                        f"planes_shape={[p.shape for p in planes]}, "
+                        f"pix_fmt={frame.pix_fmt}"
                     )
-                elif reader._out_format == OutputFormat.GRAY8:
-                    h, w = frame.array().shape
-                    print(
-                        f"First frame: {w}x{h} dtype={frame.array().dtype} fmt={reader.frame_pix_fmt}"
-                    )
-                else:
-                    h, w, c = frame.array().shape
-                    print(
-                        f"First frame: {w}x{h}x{c} dtype={frame.array().dtype} fmt={reader.frame_pix_fmt}"
-                    )
+
+                elif isinstance(frame, CpuPackedFrame):
+                    array = frame.array()
+
+                    if array.ndim == 3:
+                        h, w, c = array.shape
+                        print(
+                            f"First frame: packed (rgb24/bgr24) {w}x{h}x{c} "
+                            f"dtype={array.dtype} "
+                            f"fmt={reader.frame_pix_fmt}"
+                        )
+                    elif array.ndim == 2:
+                        h, w = array.shape
+                        print(
+                            f"First frame: packed gray8 {w}x{h} "
+                            f"dtype={array.dtype} "
+                            f"fmt={reader.frame_pix_fmt}"
+                        )
+                    else:
+                        raise RuntimeError(
+                            "Somehow received frame with ndims != 2 or 3"
+                        )
 
             if consumed % 30 == 0:
                 print(

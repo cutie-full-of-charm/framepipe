@@ -1,6 +1,10 @@
-// src/reader.cpp
+/*
+ * src/reader.cpp
+ * SPDX-License-Identifier: MPL-2.0
+ */
 #include "reader.hpp"
 #include "_base.hpp"
+#include "_error.hpp"
 #include "cuda_loader.hpp"
 #include "frame.hpp"
 #include "pipeline.hpp"
@@ -19,14 +23,12 @@
 #include "post_processors/transfer.hpp"
 #include <cerrno>
 #include <chrono>
-// #include <cstdio>
 #include <exception>
 #include <memory>
 #include <mutex>
 #include <nanobind/nanobind.h>
 #include <new>
 #include <optional>
-// #include <print>
 #include <source_location>
 #include <spdlog/common.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
@@ -72,9 +74,6 @@ extern "C" {
 namespace {
 
 // защита потока декодинга и rtsp-сессии от ошибки при декоде VAAPI поверхности,
-// FIXME: сейчас весь код держится на throw, ситуация изменится когда это всё переведется на expected,
-// пока что приходится терпеть пересоздание rtsp-сессии при каждой поломке декодера,
-// но вот конкретно здесь сессия не будет пересоздаваться
 class CorruptHardwareFrame final : public std::runtime_error {
   public:
     using std::runtime_error::runtime_error;
@@ -102,7 +101,6 @@ void check_vaapi_decoded_frame(const AVFrame *frame, spdlog::logger &log) {
         const VAStatus query =
             vaQuerySurfaceError(vaapi_ctx->display, surface, status, reinterpret_cast<void **>(&errors));
         if (query == VA_STATUS_SUCCESS && errors) {
-            // libva owns this sentinel-terminated array.
             unsigned regions = 0;
             uint64_t reported_mbs = 0;
             for (int i = 0; errors[i].status != -1; ++i) {
@@ -121,8 +119,9 @@ void check_vaapi_decoded_frame(const AVFrame *frame, spdlog::logger &log) {
             std::format("VAAPI decode error at pts={} surface=0x{:x}", frame->pts, static_cast<unsigned>(surface)));
     }
 
-    throw std::runtime_error(std::format("vaSyncSurface(surface=0x{:x}) failed: {} (status={})",
-                                         static_cast<unsigned>(surface), vaErrorStr(status), static_cast<int>(status)));
+    throw ReaderError(ErrorKind::HardwareFailure,
+                      std::format("vaSyncSurface(surface=0x{:x}) failed: {} (status={})",
+                                  static_cast<unsigned>(surface), vaErrorStr(status), static_cast<int>(status)));
 }
 #endif // !_WIN32
 
@@ -219,24 +218,25 @@ Reader::Reader(const std::string &source, const std::string &name, bool verbose,
     // кроме как в NATIVE? только через openCL у меня это получилось?
     if (output_memory == MemoryType::GPU && postprocessor == PostProcessor::VAAPI &&
         out_format != OutputFormat::NATIVE) {
-        throw std::invalid_argument("VAAPI output memory requires OutputFormat.NATIVE");
+        throw ReaderError(ErrorKind::UnsupportedConfig, "VAAPI output memory requires OutputFormat.NATIVE");
     }
 
 #ifdef _WIN32
     if (hwaccel == HWAccel::VAAPI) {
-        throw std::invalid_argument("VAAPI hardware decoding is unavailable on Windows; use D3D11VA");
+        throw ReaderError(ErrorKind::UnsupportedConfig,
+                          "VAAPI hardware decoding is unavailable on Windows; use D3D11VA");
     }
     if (postprocessor == PostProcessor::VAAPI || postprocessor == PostProcessor::OPENCL) {
-        throw std::invalid_argument("VAAPI/OpenCL postprocessors are unavailable in Windows build");
+        throw ReaderError(ErrorKind::UnsupportedConfig, "VAAPI/OpenCL postprocessors are unavailable in Windows build");
     }
 #endif
 
     _is_live = _detect_live_source(source);
     if (_on_demand && _is_live) {
-        throw std::invalid_argument("on_demand=True is supported only for file sources");
+        throw ReaderError(ErrorKind::UnsupportedConfig, "on_demand=True is supported only for file sources");
     }
     if (_on_demand && _realtime_file) {
-        throw std::invalid_argument("on_demand=True is incompatible with realtime_file=True");
+        throw ReaderError(ErrorKind::UnsupportedConfig, "on_demand=True is incompatible with realtime_file=True");
     }
 
     if (out_format == OutputFormat::NATIVE) {
@@ -290,9 +290,10 @@ std::shared_ptr<Frame> Reader::read_new() {
     return _frame;
 }
 
+// FIXME: on_demand_error теряет код FFmpeg
 std::shared_ptr<Frame> Reader::next() {
     if (!_on_demand) {
-        throw std::logic_error("next() requires on_demand=True");
+        throw ReaderError(ErrorKind::UnsupportedConfig, "next() requires on_demand=True");
     }
 
     std::lock_guard<std::mutex> next_guard(_next_lock);
@@ -300,12 +301,12 @@ std::shared_ptr<Frame> Reader::next() {
 
     if (_on_demand_finished || _stop_flag.load()) {
         if (!_on_demand_error.empty()) {
-            throw std::runtime_error(_on_demand_error);
+            throw ReaderError(ErrorKind::InternalError, _on_demand_error);
         }
         return nullptr;
     }
     if (!_thread.joinable()) {
-        throw std::logic_error("Call start_thread() before next()");
+        throw ReaderError(ErrorKind::InternalError, "Call start_thread() before next()");
     }
 
     const uint64_t previous_id = _frame_id;
@@ -318,7 +319,7 @@ std::shared_ptr<Frame> Reader::next() {
         return _frame;
     }
     if (!_on_demand_error.empty()) {
-        throw std::runtime_error(_on_demand_error);
+        throw ReaderError(ErrorKind::InternalError, _on_demand_error);
     }
     return nullptr; // EOF
 }
@@ -334,7 +335,7 @@ bool Reader::_await_frame_request() {
 
 std::optional<std::shared_ptr<Frame>> Reader::read_latest(double timeout_sec) {
     if (!std::isfinite(timeout_sec) || timeout_sec < 0.0) {
-        throw std::invalid_argument("timeout_sec must be finite and non-negative");
+        throw ReaderError(ErrorKind::UnsupportedConfig, "timeout_sec must be finite and non-negative");
     }
 
     std::unique_lock<std::mutex> lock(_lock);
@@ -385,7 +386,7 @@ std::string Reader::frame_pix_fmt() const { return pixname((AVPixelFormat)_last_
 
 void Reader::start_thread() {
     if (_thread.joinable()) {
-        throw std::logic_error("Reader worker already started");
+        throw ReaderError(ErrorKind::InternalError, "Reader worker already started");
     }
     _thread = std::thread(&Reader::_loop, this);
 }
@@ -423,50 +424,102 @@ bool Reader::_detect_live_source(const std::string &source) {
     return false;
 }
 
-void Reader::_loop() {
-    uint64_t attempt = 0;
+std::exception_ptr Reader::get_last_exception() const {
+    std::lock_guard<std::mutex> lock(_lock);
+    return _last_exception;
+}
 
-    while (!_stop_flag.load()) {
-        ++attempt;
-        _set_state(State::CONNECTING);
-        const auto started = std::chrono::steady_clock::now();
+void Reader::_loop() noexcept {
+    std::exception_ptr fatal_error;
 
-        try {
-            _log->info("session#{}", attempt);
-            _run_stream();
+    try {
+        uint64_t attempt = 0;
 
-            if (!_stop_flag.load()) {
-                _log->warn("session#{} ended without exception", attempt);
+        while (!_stop_flag.load()) {
+            ++attempt;
+            bool retry = false;
+
+            try {
+                _set_state(State::CONNECTING);
+                _log->info("session#{}", attempt);
+
+                _run_stream();
+
+                retry = _is_live && !_on_demand && !_stop_flag.load();
+
+            } catch (const ReaderError &e) {
+                if (_stop_flag.load())
+                    break;
+
+                retry = _is_live && !_on_demand &&
+                        (e.kind() == ErrorKind::ConnectionLost || e.kind() == ErrorKind::SourceUnavailable);
+
+                _log->error("session#{}: kind={}, code={}, error={}", attempt, static_cast<int>(e.kind()),
+                            e.ffmpeg_code(), e.what());
+
+                if (!retry) {
+                    fatal_error = std::current_exception();
+
+                    if (_on_demand) {
+                        std::lock_guard lock(_lock);
+                        _on_demand_error = e.what();
+                    }
+                }
+
+            } catch (const std::exception &e) {
+                if (_stop_flag.load())
+                    break;
+
+                fatal_error = std::current_exception();
+                retry = false;
+
+                _log->error("session#{}: unexpected error: {}", attempt, e.what());
+
+                if (_on_demand) {
+                    std::lock_guard lock(_lock);
+                    _on_demand_error = e.what();
+                }
             }
-        } catch (const std::exception &e) {
-            if (_on_demand) {
-                std::lock_guard<std::mutex> lock(_lock);
-                _on_demand_error = e.what();
-            }
-            if (!_stop_flag.load()) {
-                const double elapsed =
-                    std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
 
-                _log->warn("session#{} failed after {:.2f}s: {}", attempt, elapsed, e.what());
-            }
+            if (!retry || _stop_flag.load())
+                break;
+
+            _set_state(State::DEGRADED);
+
+            std::unique_lock lock(_lock);
+            _cv.wait_for(lock, std::chrono::duration<double>(_reconnect_delay_sec),
+                         [this] { return _stop_flag.load(); });
         }
 
-        if (_stop_flag.load() || _on_demand)
-            break;
+    } catch (...) {
+        if (!fatal_error && !_stop_flag.load())
+            fatal_error = std::current_exception();
 
-        _set_state(State::DEGRADED);
-        std::this_thread::sleep_for(std::chrono::duration<double>(_reconnect_delay_sec));
+        try {
+            _log->error("Unexpected failure in Reader::_loop");
+        } catch (...) {
+        }
+    }
+    try {
+        _set_state(State::STOPPED);
+    } catch (...) {
+        _state.store(State::STOPPED);
     }
 
     {
-        std::lock_guard<std::mutex> lock(_lock);
+        std::lock_guard lock(_lock);
+
+        if (fatal_error)
+            _last_exception = fatal_error;
+
         _on_demand_finished = true;
         _request_pending = false;
     }
-    _set_state(State::STOPPED);
+
     _cv.notify_all();
     _request_cv.notify_all();
 }
+
 struct FormatDeleter {
     void operator()(AVFormatContext *p) const { avformat_close_input(&p); }
 };
@@ -493,10 +546,13 @@ using PacketPtr = std::unique_ptr<AVPacket, PacketDeleter>;
 using DictPtr = std::unique_ptr<AVDictionary, DictDeleter>;
 using BufferPtr = std::unique_ptr<AVBufferRef, BufferDeleter>;
 
-auto check = [](int ret, const char *operation, std::source_location loc = std::source_location::current()) {
+auto check = [](int ret, const char *operation, ErrorKind error_kind,
+                std::source_location loc = std::source_location::current()) {
     if (ret < 0) {
-        throw std::runtime_error(std::format("{}:{} [{}] {} failed (code={}): {}", loc.file_name(), loc.line(),
-                                             loc.function_name(), operation, ret, averr(ret)));
+        throw ReaderError(error_kind,
+                          std::format("{}:{} [{}] {} failed (code={}): {}", loc.file_name(), loc.line(),
+                                      loc.function_name(), operation, ret, averr(ret)),
+                          ret);
     }
 };
 
@@ -508,7 +564,7 @@ void Reader::_run_stream() {
         int ret = av_dict_set(&raw_opts, key.c_str(), value.c_str(), 0);
         if (ret < 0) {
             av_dict_free(&raw_opts);
-            check(ret, "av_dict_set");
+            check(ret, "av_dict_set", ErrorKind::InternalError);
         }
     }
 
@@ -525,12 +581,12 @@ void Reader::_run_stream() {
         if (raw_fmt) {
             avformat_close_input(&raw_fmt);
         }
-        check(ret, "avformat_open_input");
+        check(ret, "avformat_open_input", ErrorKind::SourceUnavailable);
     }
 
     FormatPtr fmt_ctx(raw_fmt);
 
-    check(avformat_find_stream_info(fmt_ctx.get(), nullptr), "avformat_find_stream_info");
+    check(avformat_find_stream_info(fmt_ctx.get(), nullptr), "avformat_find_stream_info", ErrorKind::InternalError);
 
     // 2. Поиск видеопотока
     int stream_idx = -1;
@@ -551,7 +607,7 @@ void Reader::_run_stream() {
     }
 
     if (stream_idx < 0) {
-        throw std::runtime_error("No video stream found");
+        throw ReaderError(ErrorKind::InternalError, "No video stream found");
     }
 
     AVStream *stream = fmt_ctx->streams[stream_idx];
@@ -560,15 +616,16 @@ void Reader::_run_stream() {
     // 3. Инициализация декодера
     const AVCodec *codec = avcodec_find_decoder(stream->codecpar->codec_id);
     if (!codec) {
-        throw std::runtime_error("Video decoder not found");
+        throw ReaderError(ErrorKind::UnsupportedConfig, "Video decoder not found");
     }
 
     CodecPtr codec_ctx(avcodec_alloc_context3(codec));
     if (!codec_ctx) {
-        throw std::bad_alloc();
+        throw ReaderError(ErrorKind::HardwareFailure, "codec_ctx allocation error");
     }
 
-    check(avcodec_parameters_to_context(codec_ctx.get(), stream->codecpar), "avcodec_parameters_to_context");
+    check(avcodec_parameters_to_context(codec_ctx.get(), stream->codecpar), "avcodec_parameters_to_context",
+          ErrorKind::InternalError);
 
     const bool hw_enabled = hwaccel_requested != HWAccel::SOFTWARE;
 
@@ -584,7 +641,7 @@ void Reader::_run_stream() {
         const AVHWDeviceType type = to_hw_type(hwaccel_requested);
 
         if (type == AV_HWDEVICE_TYPE_NONE) {
-            throw std::runtime_error("Unknown hardware acceleration backend");
+            throw ReaderError(ErrorKind::HardwareFailure, "Unknown hardware acceleration backend");
         }
 
         _hw_pix_fmt = find_codec_hw_pixfmt(codec, type);
@@ -602,14 +659,15 @@ void Reader::_run_stream() {
 
         configure_vaapi_driver_path();
 
-        check(av_hwdevice_ctx_create(&raw_device, type, device, nullptr, 0), "av_hwdevice_ctx_create");
+        check(av_hwdevice_ctx_create(&raw_device, type, device, nullptr, 0), "av_hwdevice_ctx_create",
+              ErrorKind::HardwareFailure);
 
         hw_device.reset(raw_device);
 
         codec_ctx->hw_device_ctx = av_buffer_ref(hw_device.get());
 
         if (!codec_ctx->hw_device_ctx) {
-            throw std::bad_alloc();
+            throw ReaderError(ErrorKind::InternalError, "hw_device_ctx allocation error");
         }
 
         codec_ctx->opaque = this;
@@ -618,10 +676,11 @@ void Reader::_run_stream() {
 
         hwaccel_active = av_hwdevice_get_type_name(type);
     } else {
+        // FIXME: добавить управление политикой потоков из python
         codec_ctx->thread_type = FF_THREAD_FRAME | FF_THREAD_SLICE;
     }
 
-    check(avcodec_open2(codec_ctx.get(), codec, nullptr), "avcodec_open2");
+    check(avcodec_open2(codec_ctx.get(), codec, nullptr), "avcodec_open2", ErrorKind::InternalError);
 
     _log->info("opened: codec={} {}x{} src_fmt={} tb={:.6g} hw={}", codec->name, codec_ctx->width, codec_ctx->height,
                pixname(codec_ctx->pix_fmt), _time_base, hwaccel_active);
@@ -647,74 +706,75 @@ void Reader::_run_stream() {
         const auto mem = _output_memory_requested;
 
         if (hw == HWAccel::D3D11VA && (pp != PostProcessor::CPU || mem != MemoryType::CPU)) {
-            throw std::invalid_argument("D3D11VA currently supports only CPU postprocessing and CPU output");
+            throw ReaderError(ErrorKind::UnsupportedConfig,
+                              "D3D11VA currently supports only CPU postprocessing and CPU output");
         }
 
         // 1. Проверка совместимости backend
         switch (pp) {
         case PostProcessor::CUDA:
             if (hw != HWAccel::CUDA) {
-                throw std::runtime_error("CUDA processing requires CUDA decoding");
+                throw ReaderError(ErrorKind::UnsupportedConfig, "CUDA processing requires CUDA decoding");
             }
             break;
 
         case PostProcessor::VAAPI:
 #ifdef _WIN32
-            throw std::runtime_error("VAAPI postprocessing is unavailable on Windows");
+            throw ReaderError(ErrorKind::UnsupportedConfig, "VAAPI postprocessing is unavailable on Windows");
 #else
             if (hw != HWAccel::VAAPI) {
-                throw std::runtime_error("VAAPI processing requires VAAPI decoding");
+                throw ReaderError(ErrorKind::UnsupportedConfig, "VAAPI processing requires VAAPI decoding");
             }
             if (!src || src->format != AV_PIX_FMT_VAAPI || !src->hw_frames_ctx) {
-                throw std::runtime_error("VAAPI processing requires a hardware AVFrame");
+                throw ReaderError(ErrorKind::HardwareFailure, "VAAPI processing requires a hardware AVFrame");
             }
             break;
 #endif
 
         case PostProcessor::CPU:
             if (mem == MemoryType::GPU) {
-                throw std::runtime_error("CPU postprocessor cannot produce GPU output");
+                throw ReaderError(ErrorKind::HardwareFailure, "CPU postprocessor cannot produce GPU output");
             }
             break;
 
         case PostProcessor::OPENCL:
 #ifdef _WIN32
-            throw std::runtime_error("OpenCL/VAAPI interop is unavailable on Windows");
+            throw ReaderError(ErrorKind::UnsupportedConfig, "OpenCL/VAAPI interop is unavailable on Windows");
 #else
             if (hw != HWAccel::VAAPI) {
-                throw std::runtime_error("OpenCL processing currently requires VAAPI decoding");
+                throw ReaderError(ErrorKind::UnsupportedConfig, "OpenCL processing currently requires VAAPI decoding");
             }
             if (!src || src->format != AV_PIX_FMT_VAAPI || !src->hw_frames_ctx) {
-                throw std::runtime_error("OpenCL processing requires a VAAPI hardware AVFrame");
+                throw ReaderError(ErrorKind::HardwareFailure, "OpenCL processing requires a VAAPI hardware AVFrame");
             }
             break;
 #endif
 
         default:
-            throw std::runtime_error("Unsupported postprocessor");
+            throw ReaderError(ErrorKind::UnsupportedConfig, "Unsupported postprocessor");
         }
 
         // 2. Проверка формата NATIVE
         if (out_format == OutputFormat::NATIVE) {
             if (pp == PostProcessor::CUDA) {
-                throw std::runtime_error("CUDA processing does not support NATIVE");
+                throw ReaderError(ErrorKind::UnsupportedConfig, "CUDA processing does not support NATIVE");
             }
 
             if (pp == PostProcessor::OPENCL && (width != src->width || height != src->height)) {
                 // std::print(
                 // "src->width={}, width_={}, src->height={}, height_={}",
                 // src->width, width, src->height, height);
-                throw std::runtime_error("OpenCL NATIVE NV12 does not support "
-                                         "resize; use source dimensions");
+                throw ReaderError(ErrorKind::UnsupportedConfig, "OpenCL NATIVE NV12 does not support "
+                                                                "resize; use source dimensions");
             }
 
             if (pp == PostProcessor::CPU) {
 
                 if (mem != MemoryType::CPU) {
-                    throw std::runtime_error("CPU NATIVE requires CPU output");
+                    throw ReaderError(ErrorKind::UnsupportedConfig, "CPU NATIVE requires CPU output");
                 }
                 if (width != codec_ctx->width || height != codec_ctx->height) {
-                    throw std::runtime_error("CPU NATIVE does not support resize");
+                    throw ReaderError(ErrorKind::UnsupportedConfig, "CPU NATIVE does not support resize");
                 }
             }
         }
@@ -761,18 +821,16 @@ void Reader::_run_stream() {
                        out_format == OutputFormat::NATIVE ? "native NV12" : "packed pixels",
                        mem == MemoryType::GPU ? "GPU" : "CPU");
 #else
-            throw std::runtime_error("framepipe built without OpenCL support");
+            throw ReaderError(ErrorKind::UnsupportedConfig, "framepipe built without OpenCL support");
+
 #endif
             break;
 
         case PostProcessor::VAAPI:
 #ifdef _WIN32
-            throw std::runtime_error("VAAPI postprocessing is unavailable on Windows");
+            throw ReaderError(ErrorKind::UnsupportedConfig, "VAAPI postprocessing is unavailable on Windows");
 #else
             if (width == src->width && height == src->height) {
-                // Без ресайза можно использовать passthrough, конверсия цвета не поддерживается,
-                // больше vaapi_scale незачем вызывать
-                // FIXME: уточнить? конверсию цвета все же можно реализовать нормально в vaapi_scale?
                 processor = std::make_unique<VaapiPassthroughProcessor>();
                 _log->info("VAAPI: passthrough (filter graph bypassed)");
             } else {
@@ -784,7 +842,7 @@ void Reader::_run_stream() {
 #endif
 
         default:
-            throw std::runtime_error("Unsupported postprocessor");
+            throw ReaderError(ErrorKind::UnsupportedConfig, "Unsupported postprocessor");
         }
 
         // 5. OutputTransfer
@@ -799,7 +857,7 @@ void Reader::_run_stream() {
 #ifndef _WIN32
                 output_transfer = std::make_unique<VaapiToCpuTransfer>(out_format);
 #else
-                throw std::runtime_error("VAAPI postprocessing is unavailable on Windows");
+                throw ReaderError(ErrorKind::UnsupportedConfig, "VAAPI postprocessing is unavailable on Windows");
 #endif
             } else {
                 output_transfer = std::make_unique<NoOpOutputTransfer>();
@@ -809,16 +867,17 @@ void Reader::_run_stream() {
         case MemoryType::GPU:
             if (pp == PostProcessor::VAAPI) {
                 if (out_format != OutputFormat::NATIVE) {
-                    throw std::invalid_argument("VAAPI GPU output requires NATIVE format");
+                    throw ReaderError(ErrorKind::UnsupportedConfig, "VAAPI GPU output requires NATIVE format");
                 }
             } else if (pp != PostProcessor::CUDA && pp != PostProcessor::OPENCL) {
-                throw std::runtime_error("GPU output requires CUDA, VAAPI, or OpenCL processing");
+                throw ReaderError(ErrorKind::UnsupportedConfig,
+                                  "GPU output requires CUDA, VAAPI, or OpenCL processing");
             }
             output_transfer = std::make_unique<NoOpOutputTransfer>();
             break;
 
         default:
-            throw std::runtime_error("Unsupported output memory type");
+            throw ReaderError(ErrorKind::UnsupportedConfig, "Unsupported output memory type");
         }
 
         return std::make_unique<FramePipeline>(std::move(input_transfer), std::move(processor),
@@ -830,7 +889,7 @@ void Reader::_run_stream() {
     FramePtr decoded = make_frame();
 
     if (!packet) {
-        throw std::bad_alloc();
+        throw ReaderError(ErrorKind::HardwareFailure, "packet allocation error");
     }
 
     double start_wall = -1.0;
@@ -839,11 +898,11 @@ void Reader::_run_stream() {
     // 6. Обработка одного кадра
     auto process_frame = [&](const AVFrame *src) {
         if (hw_enabled && src->format != _hw_pix_fmt) {
-            throw std::runtime_error("Decoder returned software frame despite HW acceleration");
+            throw ReaderError(ErrorKind::DecodeFailed, "Decoder returned software frame despite HW acceleration");
         }
 
         if (!hw_enabled && src->hw_frames_ctx) {
-            throw std::runtime_error("Unexpected hardware frame from software decoder");
+            throw ReaderError(ErrorKind::DecodeFailed, "Unexpected hardware frame from software decoder");
         }
 
         const int src_w = src->width;
@@ -861,7 +920,7 @@ void Reader::_run_stream() {
         }
 
         if (out_w <= 0 || out_h <= 0) {
-            throw std::runtime_error("Invalid output dimensions");
+            throw ReaderError(ErrorKind::DecodeFailed, "Invalid output dimensions");
         }
 
         // Check the decoded surface before any transfer or GPU postprocessing.
@@ -963,8 +1022,6 @@ void Reader::_run_stream() {
         }
     };
 
-    // Limit the consecutive bad frames; if the decoder cannot recover, keep
-    // the existing session-level restart as a fallback.
     constexpr unsigned max_consecutive_decode_errors = 25;
     unsigned consecutive_decode_errors = 0;
     uint64_t dropped_decode_frames = 0;
@@ -976,19 +1033,18 @@ void Reader::_run_stream() {
                 return AVERROR(EAGAIN);
             }
             // const auto t0 = Clock::now();
-            int result = avcodec_receive_frame(codec_ctx.get(), decoded.get());
+            int ret = avcodec_receive_frame(codec_ctx.get(), decoded.get());
             // const auto t1 = Clock::now();
             // const double receive_ms = std::chrono::duration<double,
             // std::milli>(t1 - t0).count(); std::print("receive frame={}\n",
             // receive_ms);
 
-            if (result == AVERROR(EAGAIN) || result == AVERROR_EOF) {
-                return result;
+            if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
+                return ret;
             }
 
-            check(result, "avcodec_receive_frame");
+            check(ret, "avcodec_receive_frame", ErrorKind::DecodeFailed);
 
-            // Гарантируем av_frame_unref при исключении
             struct UnrefGuard {
                 AVFrame *frame;
 
@@ -1010,11 +1066,10 @@ void Reader::_run_stream() {
                 _log->warn("Skipping damaged VAAPI frame (dropped={}, consecutive={}): {}", dropped_decode_frames,
                            consecutive_decode_errors, e.what());
                 if (consecutive_decode_errors >= max_consecutive_decode_errors) {
-                    throw std::runtime_error(std::format(
-                        "VAAPI decode did not recover after {} consecutive damaged frames", consecutive_decode_errors));
+                    throw ReaderError(ErrorKind::HardwareFailure,
+                                      std::format("VAAPI decode did not recover after {} consecutive damaged frames",
+                                                  consecutive_decode_errors));
                 }
-                // UnrefGuard releases decoded before avcodec_receive_frame runs again.
-                // Do NOT flush or recreate the decoder for one bad output surface.
                 continue;
             }
         }
@@ -1037,7 +1092,7 @@ void Reader::_run_stream() {
         }
 
         if (ret < 0) {
-            check(ret, "av_read_frame");
+            check(ret, "av_read_frame", ErrorKind::ConnectionLost);
         }
 
         if (packet->stream_index != stream_idx) {
@@ -1067,20 +1122,20 @@ void Reader::_run_stream() {
                 break;
 
             if (drain_ret != AVERROR(EAGAIN)) {
-                throw std::runtime_error("Decoder could not accept pending packet");
+                throw ReaderError(ErrorKind::DecodeFailed, "Decoder could not accept pending packet");
             }
 
             ret = avcodec_send_packet(codec_ctx.get(), packet.get());
         }
 
         av_packet_unref(packet.get());
-        check(ret, "avcodec_send_packet");
+        check(ret, "avcodec_send_packet", ErrorKind::DecodeFailed);
         receive_frames();
     }
 
     // 10. Flush декодера на EOF
     if (reached_eof && !_stop_flag.load()) {
-        check(avcodec_send_packet(codec_ctx.get(), nullptr), "avcodec_send_packet(flush)");
+        check(avcodec_send_packet(codec_ctx.get(), nullptr), "avcodec_send_packet(flush)", ErrorKind::InternalError);
 
         while (!_stop_flag.load()) {
             int result = receive_frames();
@@ -1089,7 +1144,7 @@ void Reader::_run_stream() {
             }
 
             if (result == AVERROR(EAGAIN)) {
-                throw std::runtime_error("Unexpected EAGAIN during decoder flush");
+                throw ReaderError(ErrorKind::InternalError, "Unexpected EAGAIN during decoder flush");
             }
         }
     }

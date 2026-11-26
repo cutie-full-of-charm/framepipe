@@ -1,4 +1,7 @@
-// src/cuda_loader.cpp
+/*
+ * src/cuda_loader.cpp
+ * SPDX-License-Identifier: MPL-2.0
+ */
 #include "cuda_loader.hpp"
 #include "_base.hpp"
 #include "post_processors/processor.hpp"

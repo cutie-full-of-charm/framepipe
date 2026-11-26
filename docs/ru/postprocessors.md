@@ -4,14 +4,7 @@
 > Здесь описан путь обработки кадра. Реализация развивается, в том числе по части цветовых матриц и форматов.  
 > Общая таблица: [compatibility.md](compatibility.md).
 
-## Таблица
-
-| Постпроцессор | Требуемое декодирование | Формат на входе | Выходные форматы | Куда выводит | Масштабирование | Цветовая матрица |
-| --- | --- | --- | --- | --- | --- | --- |
-| `CPU` | SOFTWARE / CUDA / VAAPI / D3D11VA | Software AVFrame, полученный напрямую или после HW download | BGR24, RGB24, GRAY8, NATIVE | CPU | Да, если формат не NATIVE | FFmpeg swscale, явная настройка матрицы отсутствует |
-| `CUDA` | CUDA | CUDA surface, sw_format=NV12 | BGR24, RGB24, GRAY8 | CPU или CUDA GPU | в CUDA kernel захардожен bilinear алгоритм | фиксированная, только BT.709 limited для RGB/BGR |
-| `VAAPI` | VAAPI | VAAPI surface | BGR24, RGB24, GRAY8, NATIVE | CPU, для GPU только NATIVE | через `scale_vaapi` | VPP без настройки матрицы, CPU-конверсия через swscale |
-| `OPENCL` | VAAPI | VAAPI surface, sw_format=NV12, 8-bit | BGR24, RGB24, GRAY8, NATIVE | CPU или OpenCL GPU | Да для packed, NATIVE без resize | Есть поддержка метаданных матрицы + range + chroma |
+Варианты `HWAccel` / `PostProcessor` / `MemoryType` / `OutputFormat` сведены в [compatibility.md](compatibility.md). Ниже — что на самом деле делает каждый постпроцессор, включая ограничения входа и места копирования.
 
 ## `PostProcessor.CPU`
 
@@ -31,10 +24,8 @@ Ref файлы реализации: `src/post_processors/impls/cuda.cpp`, `src/
 
 - Допустим только с `HWAccel.CUDA`, вход `AV_PIX_FMT_CUDA` +  `sw_format=AV_PIX_FMT_NV12`.
 - В CUDA-kernel выполняются bilinear resize и, если требуется, преобразование NV12->RGB/BGR.
-- `GRAY8` берётся из plane Y, `RGB24`/`BGR24` используют захардкоженные коэффициенты BT.709, limited-range, поддержка других будет добавлена в дальнейшем (`0.4.2.dev4`). Метаданные kernel не учитывает.
+- `GRAY8` берётся из plane Y; `RGB24`/`BGR24` используют фиксированную BT.709 limited, метаданные матрицы и диапазона kernel не учитывает. Формула приведена в [pixel-formats-and-color.md](pixel-formats-and-color.md).
 - `MemoryType.GPU` -> `CudaFrame` с packed `uint8` (и DLPack), `MemoryType.CPU` -> загрузка конвертированного packed результата в RAM.
-
-Внимание: для других цветовых матриц (BT.601/BT.2020), full-range и другого расположения chroma нельзя обещать корректный цвет после конвертации cuda kernel'ом (`0.4.2.dev4`). Если важна корректная передача цвета, проверьте входные метаданные, выберите другой путь.
 
 ## `PostProcessor.VAAPI`
 
@@ -57,7 +48,7 @@ Ref файлы реализации: `src/post_processors/impls/opencl.cpp`, `sr
 - NV12-плоскости отображаются как OpenCL Y/UV images, в случае `BGR24`/`RGB24`/`GRAY8` kernel выполняет bilinear resize и конвертацию.
 - `MemoryType.GPU` + packed -> `OpenCLBufferFrame` (`cl_mem`), `MemoryType.CPU` + packed → `CpuPackedFrame`.
 - `OutputFormat.NATIVE` только при исходных размерах: на GPU это `OpenCLImageFrame`, на CPU -- `CpuPlanarFrame` с NV12.
-- Цвет: поддерживается почти все, что может понадобиться: матрицы BT.709, BT.601 (BT.470BG/SMPTE 170M), BT.2020 NCL, SMPTE 240M, FCC, при `UNSPECIFIED` выбирается BT.601 и пишется предупреждение, другие неизвестные значения вызывают ошибку. Поддержаны full/limited range и набор расположений chroma, значения по умолчанию описаны в [цветах](pixel-formats-and-color.md).
+- Цвет: учитываются метаданные матрицы, диапазона и положения chroma; неизвестные значения имеют отдельные правила fallback или вызывают ошибку. Точные варианты и значения по умолчанию — в [pixel-formats-and-color.md](pixel-formats-and-color.md).
 - Packed OpenCL DLPack маркируется устройством OpenCL (device_type=4). Это не CUDA, `torch.from_dlpack()` в версии `0.4.2.dev4` у меня не сработал.
 
 ## Где происходит копирование
@@ -72,5 +63,3 @@ Ref файлы реализации: `src/post_processors/impls/opencl.cpp`, `sr
 | VAAPI -> VAAPI постпроцессор -> CPU | VAAPI surface/scale, затем HW -> CPU и при необходимости swscale |
 | VAAPI -> OPENCL постпроцессор -> GPU | VAAPI -> OpenCL mapping, затем OpenCL kernel или выдача плоскостей |
 | VAAPI -> OPENCL постпроцессор -> CPU | VAAPI -> OpenCL mapping и hw_download результата |
-
-NOTE: "Без CPU-выгрузки" не означает отсутствие любых операций выделения/копирования на самом GPU, словосочетание zero-copy в примере 06 относится прежде всего к передаче готового CUDA-буфера в PyTorch через DLPack, а не ко всему декодированию видео

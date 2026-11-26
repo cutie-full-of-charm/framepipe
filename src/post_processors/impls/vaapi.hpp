@@ -1,4 +1,7 @@
-// src/post_processors/impls/vaapi.hpp
+/*
+ * src/post_processors/impls/vaapi.hpp
+ * SPDX-License-Identifier: MPL-2.0
+ */
 #pragma once
 
 #include "../../frame.hpp"

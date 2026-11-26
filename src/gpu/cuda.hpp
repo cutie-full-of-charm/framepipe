@@ -1,4 +1,7 @@
-// src/gpu/cuda.hpp
+/*
+ * src/gpu/cuda.hpp
+ * SPDX-License-Identifier: MPL-2.0
+ */
 #pragma once
 
 #include <cstddef>

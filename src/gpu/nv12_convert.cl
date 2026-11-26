@@ -1,4 +1,7 @@
-// src/gpu/nv12_convert.cl
+/*
+ * src/gpu/nv12_convert.cl
+ * SPDX-License-Identifier: MPL-2.0
+ */
 
 __constant sampler_t sampler_linear = CLK_NORMALIZED_COORDS_FALSE |
     CLK_ADDRESS_CLAMP_TO_EDGE | CLK_FILTER_LINEAR;

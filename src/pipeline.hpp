@@ -1,4 +1,7 @@
-// src/pipeline.hpp
+/*
+ * src/pipeline.hpp
+ * SPDX-License-Identifier: MPL-2.0
+ */
 #pragma once
 #include "frame.hpp"
 #include "post_processors/processor.hpp"

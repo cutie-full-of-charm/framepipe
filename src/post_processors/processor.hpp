@@ -1,4 +1,7 @@
-// src/post_processors/processor.hpp
+/*
+ * src/post_processors/processor.hpp
+ * SPDX-License-Identifier: MPL-2.0
+ */
 #pragma once
 
 #include "../frame.hpp"

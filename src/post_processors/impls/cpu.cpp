@@ -1,4 +1,7 @@
-// src/post_processors/impls/cpu.cpp
+/*
+ * src/post_processors/impls/cpu.cpp
+ * SPDX-License-Identifier: MPL-2.0
+ */
 #include "cpu.hpp"
 #include "../../_base.hpp"
 #include "../../frame.hpp"
